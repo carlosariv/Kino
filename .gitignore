@@ -1,0 +1,36 @@
+
+# ====================================================================
+# CMake Build Artifacts
+# ====================================================================
+bin/
+# Standard manual command-line build directories
+build/
+build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakePresets.json.user
+
+# ====================================================================
+# Visual Studio / MSVC Specific Files
+# ====================================================================
+.vs/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ====================================================================
+# Compiled C++ Binaries & Object Files (Fallback safety)
+# ====================================================================
+*.ilk
+*.obj
+*.o
+*.pdb
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+
+*.raddbg
