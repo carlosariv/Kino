@@ -1,5 +1,6 @@
 
 #include "ui.h"
+#include "ui_widgets.h"
 
 namespace ui {
 
@@ -14,7 +15,6 @@ Signal button(String string) {
     Box *box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground|BoxFlag_DrawText, string);
     return signal_from_box(box);
 }
-
 
 void line_edit_text_op(u8 **buffer_out, int *pos, int *len, int *capacity, Keycode keycode) {
     int new_pos = *pos;
@@ -109,6 +109,61 @@ void line_edit(u8 **buffer, int *pos, int *len, int *capacity, String string) {
     draw_data->len = *len;
     box->draw_data = (void *)draw_data;
     box->draw_proc = line_edit_draw;
+}
+
+ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i64 view_max, i64 view_indices) {
+    ScrollPt new_pt = scroll_pt;
+
+    // i64 scroll_indices = view_indices + (view_max - view_min);
+    // f32 scroll_ratio = (f32)(view_max - view_min) / (f32)scroll_indices;
+
+
+    i64 scroll_indices = view_indices;
+
+    Axis flipped_axis = flip_axis(axis);
+    set_next_layout_axis(axis);
+    set_next_pref_height(pref_size_parent(1.0f));
+    push_pref_width(pref_size_px(20.0f));
+    Box *container = box_create(BoxFlag_DrawBackground, name);
+    UI_Parent(container) {
+        // ui::push_pref_height(pref_size_parent(1.0f));
+        // ui::pop_pref_size(axis);
+
+        set_next_background_color(Vector4(.24f, .25f, .25f, 1.0f));
+        Box *thumb_cont = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb_cont"));
+        Vector2 thumb_dim = get_rect_size(thumb_cont->rect);
+
+        Signal scroll_sig = signal_from_box(thumb_cont);
+
+        if (scroll_sig.clicked) {
+            Vector2 scroll_pos = get_mouse_cursor() - thumb_cont->rect.tl;
+            new_pt.idx = (i64)(scroll_pos[axis] / (thumb_dim[axis] / (f32)view_indices));
+            // printf("CLICKED %lld %f %f\n", new_pt.idx, scroll_pos.x, scroll_pos.y);
+        }
+
+
+        f32 scroll_ratio = 1.0f / (f32)scroll_indices;
+
+        f32 thumb_pos = thumb_dim[axis] * ((f32)(scroll_pt.idx+1) / (f32)scroll_indices);
+        // printf("THUMB POS: %f\n", thumb_pos);
+        set_next_parent(thumb_cont);
+        set_next_fixed_x(0.f);
+        set_next_fixed_y(thumb_pos);
+        set_next_pref_size(axis, pref_size_parent(scroll_ratio));
+        // set_next_hover_cursor(OS_CURSOR_HAND);
+        set_next_background_color(Vector4(1, 0, 0, 1));
+        Box *thumb_box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb"));
+        Signal thumb_sig = signal_from_box(thumb_box);
+        if (thumb_sig.dragging) {
+            Vector2 scroll_pos = get_mouse_cursor() - thumb_cont->rect.tl;
+            new_pt.idx = (i64)(scroll_pos[axis] / (thumb_dim[axis] / (f32)view_indices));
+        }
+    }
+    pop_pref_width();
+
+
+    new_pt.idx = cu_clamp(new_pt.idx, 0, view_indices - 1);
+    return new_pt;
 }
 
 
