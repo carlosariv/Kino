@@ -121,18 +121,11 @@ void handle_key_press(Key key) {
             search->cmd();
             state->current_key_state = nullptr;
         }
-    } else {
-        printf("FAILED TO FIND KEY");
     }
 }
 
 
 UI_DRAW_PROC(ui_draw_view);
-
-Axis invert_xy(Axis axis) {
-    assert(axis == Axis_X || axis == Axis_Y);
-    return axis==Axis_X ? Axis_Y : Axis_X;
-}
 
 // void layout_pane(Pane *pane) {
 //     return;
@@ -205,6 +198,8 @@ void update(f32 dt, Array<os::Event*> window_events) {
     ui::set_next_fixed_height(window_dim.y);
     ui::set_next_fixed_x(0);
     ui::set_next_fixed_y(0);
+    ui::push_background_color(Vector4(0, 0, 0, 1));
+    ui::push_text_color(Vector4(1, 1,1, 1));
     ui::Box *main_cont = ui::box_create(ui::BoxFlag_Layer, STRZ("~MainCont"));
     UI_Parent(main_cont) {
         ui::set_next_layout_axis(Axis_X);
@@ -212,6 +207,7 @@ void update(f32 dt, Array<os::Event*> window_events) {
         ui::set_next_pref_height(ui::pref_size_px(28.0f));
         ui::Box *menu_cont = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("~MenuCont"));
         UI_Parent(menu_cont) {
+
             String menu_items[] = {
                 STRZ("File"),
                 STRZ("Edit"),
@@ -220,13 +216,18 @@ void update(f32 dt, Array<os::Event*> window_events) {
                 STRZ("Help"),
             };
 
-            for (int i = 0; i < ArrayCount(menu_items); i++) {
+            for (int i = 0; i < cu_count_of(menu_items); i++) {
                 String item = menu_items[i];
-                // ui::set_next_background_color(Vector4(1.0f, 0.0f, 0.0f, 1.0f));
                 ui::set_next_pref_height(ui::pref_size_parent(1.0f));
                 ui::set_next_pref_width(ui::pref_size_text(8.0f));
                 ui::Signal sig = ui::button(item);
             }
+
+            ui::set_next_pref_height(ui::pref_size_parent(1.0f));
+            ui::set_next_pref_width(ui::pref_size_text(8.0f));
+            ui::set_next_font(ui::icon_font);
+            ui::set_next_text_color(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+            ui::button(ui::string_from_icon_kind(ui::ICON_WARNING, "##arrow_up"));
         }
 
         View *view = get_active_view();
@@ -240,46 +241,61 @@ void update(f32 dt, Array<os::Event*> window_events) {
     }
 
 
+    FileSystem *fs = g_file_system;
+
     ui::push_background_color(Vector4(0.14f, 0.14f, 0.13f, 1.0f));
     ui::push_text_color(Vector4(0.85f, 0.82f, 0.75f, 1.0f));
     ui::set_next_fixed_width(window_dim.x);
     ui::set_next_fixed_height(window_dim.y);
     ui::set_next_fixed_x(0.0f);
     ui::set_next_fixed_y(0.0f);
-    ui::Box *file_system_cont = ui::box_create(ui::BoxFlag_Layer, STRZ("##FileSystemCont"));
-    file_system_cont->child_alignment[Axis_X] = ui::Alignment_Center;
-    file_system_cont->child_alignment[Axis_Y] = ui::Alignment_Center;
-    UI_Parent(file_system_cont) {
+    ui::set_next_child_alignment_x(ui::Alignment_Center);
+    ui::set_next_child_alignment_y(ui::Alignment_Center);
+    ui::Box *file_system_layer = ui::box_create(ui::BoxFlag_Layer, STRZ("##fsLayer"));
+    UI_Parent(file_system_layer) {
         ui::set_next_pref_width(ui::pref_size_parent(0.5f));
         ui::set_next_pref_height(ui::pref_size_parent(0.9f));
-        ui::Box *file_system_box = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##fs"));
+        ui::set_next_layout_axis(Axis_X);
+        ui::Box *file_system_cont = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##fsContainer"));
 
-        UI_Parent(file_system_box) {
-            ui::push_pref_width(ui::pref_size_text(4.0f));
-            ui::push_pref_height(ui::pref_size_text(4.0f));
+        UI_Parent(file_system_cont) {
+            // File Buttons
+            ui::set_next_fixed_width(400.0f);
+            ui::set_next_pref_height(ui::pref_size_parent(1.0f));
+            UI_Parent(ui::box_create(ui::BoxFlag_Default, STRZ("##file_buttons"))) {
+                ui::push_pref_width(ui::pref_size_text(4.0f));
+                ui::push_pref_height(ui::pref_size_text(4.0f));
 
-            struct LineEdit {
-                u8 *buffer;
-                int len;
-                int capacity;
-                int pos;
-            };
+                struct LineEdit {
+                    u8 *buffer;
+                    int len;
+                    int capacity;
+                    int pos;
+                };
 
-            static LineEdit ed = {};
+                cu_local_persist LineEdit ed = {};
 
-            ui::line_edit(&ed.buffer, &ed.pos, &ed.len, &ed.capacity, STRZ("##file_line"));
+                ui::line_edit(&ed.buffer, &ed.pos, &ed.len, &ed.capacity, STRZ("##file_line"));
 
-            FileSystem *fs = g_file_system;
-            for (int i = 0; i < fs->files.count; i++) {
-                os::File *file = &fs->files[i];
-                ui::Signal sig = ui::button(string_fmt("%s##file_%d", file->file_name.text, i));
-                if (sig.clicked) {
-                    printf("%s\n", (char *)file->file_name.text);
+                for (int i = 0; i < fs->files.count; i++) {
+                    os::File *file = &fs->files[i];
+                    ui::Signal sig = ui::button(string_fmt("%s##file_%d", file->file_name.text, i));
+                    if (sig.clicked) {
+                        printf("%s\n", (char *)file->file_name.text);
+                    }
                 }
+
+                ui::pop_pref_width();
+                ui::pop_pref_height();
             }
 
-            ui::pop_pref_width();
-            ui::pop_pref_height();
+            cu_local_persist ui::ScrollPt scroll_pt = {};
+
+            ui::set_next_fixed_width(10.0f);
+            ui::set_next_pref_height(ui::pref_size_parent(1.0f));
+            ui::set_next_background_color(Vector4(1, 0.2, 0.2, 1.0f));
+
+            scroll_pt = ui::scroll_bar(STRZ("##scroll"), Axis_Y, scroll_pt, 0, 12, 20);
         }
     }
     ui::pop_background_color();
@@ -315,9 +331,9 @@ UI_DRAW_PROC(ui_draw_view) {
 
         if (code == '\n') {
             cursor.x = start.x;
-            cursor.y += font->line_skip * scale;
+            cursor.y += (font->line_skip + font->line_gap) * scale;
         } else {
-            cursor.x += g->advance * font->scale * scale;
+            cursor.x += g->advance * scale;
         }
     }
 
@@ -331,7 +347,7 @@ UI_DRAW_PROC(ui_draw_view) {
         cursor.x, // cursor.x + g->lsb * font->scale,
         cursor.y, // + font->ascent + g->y_off,
         cursor.x + 2.0f, // cursor.x + (g->lsb * font->scale) + g->bw,
-        cursor.y + font->line_skip * scale // + font->ascent + g->y_off + g->bh
+        cursor.y + (font->line_skip + font->line_gap) * scale // + font->ascent + g->y_off + g->bh
     );
 
     ui::draw_rect(dst, Vector4(0, 0, 0, 1));
