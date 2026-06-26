@@ -7,18 +7,6 @@
 
 namespace math {
 
-template <typename T>
-T max(const T a, const T b) {
-    if (a > b) return a;
-    return b;
-}
-
-template <typename T>
-T min(const T a, const T b) {
-    if (a < b) return a;
-    return b;
-}
-
 const f32 PI = 3.14159265358979323846264338327950288f;
 
 f32 cos(f32 f);
