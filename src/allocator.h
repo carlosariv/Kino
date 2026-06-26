@@ -5,8 +5,6 @@
 
 #include "utils.h"
 
-inline static constexpr size_t DEFAULT_ARENA_SIZE = 1024*64;
-
 enum AllocationKind {
     AllocationKind_Allocate,
     AllocationKind_Free,
@@ -41,6 +39,9 @@ struct Arena {
     u64 default_size;
 };
 
+extern Allocator g_heap_allocator;
+inline static constexpr size_t DEFAULT_ARENA_SIZE = cu_kilobytes(64);
+
 Allocator arena_allocator(Arena *arena);
 Arena *make_arena(u64 size = DEFAULT_ARENA_SIZE);
 void *arena_push(Arena *arena, u64 size);
@@ -56,10 +57,9 @@ void *cu_free(Allocator a, void *ptr);
 void *cu_resize(Allocator a, void *ptr, isize old_size, isize new_size);
 
 #define cu_alloc_item(T,a,size) (T*)cu_allocate(a, size)
-#define cu_alloc_array(T,a,size) (T*)cu_free(a, size)
+#define cu_alloc_array(T,a,size) (T*)cu_allocate(a, size)
 
 // #define push_array(A,T,C) (T*)arena_push(A, sizeof(T)*C)
 #define New(T,A) new (cu_allocate(A,sizeof(T))) T
-#define NewArray(T,C,A) new (cu_allocate(A,(C)*sizeof(T))) T
+#define NewArray(T,A,C) new (cu_allocate(A,(C)*sizeof(T))) T
 
-extern Allocator g_heap_allocator;
