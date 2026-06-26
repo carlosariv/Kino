@@ -5,13 +5,43 @@
 #include "ui.h"
 #include "texture.h"
 #include "math.h"
+#include "utils.h"
+
 
 namespace ui {
+
 UIState *ui_state;
 DrawData *ui_draw_data;
+Font *icon_font;
 
 Arena *get_build_arena() {
-    return ui_state->build_arenas[ui_state->build_index%ArrayCount(ui_state->build_arenas)];
+    return ui_state->build_arenas[ui_state->build_index%cu_count_of(ui_state->build_arenas)];
+}
+
+char *icon_kind_strings[] = {
+    "W",
+    "x",
+    "!",
+    "1",
+    "U",
+    "D",
+    "L",
+    "R",
+    "9",
+    "0",
+    "7",
+    "8",
+    "{",
+    "}",
+    "C",
+    "F",
+    "#",
+};
+
+String string_from_icon_kind(IconKind kind, const char *end) {
+    char *icon_string = icon_kind_strings[kind];
+    String result = string_fmt("%s%s", icon_string, end);
+    return result;
 }
 
 Vector2 get_mouse_cursor() {
@@ -277,7 +307,7 @@ Vector2 measure_text_size(String text, Font *font, f32 size) {
             w = 0.0f;
             dim.y += font->line_skip * scale;
         } else {
-            w += g->advance * font->scale * scale;
+            w += g->advance * scale;
         }
     }
     if (w > dim.x) {
@@ -343,7 +373,7 @@ void layout_calc_downwards_dependent_sizes(Box *root, Axis axis) {
             if (root->child_layout_axis == axis) {
                 sum += child->fixed_size[axis];
             } else {
-                sum = math::max(sum, child->fixed_size[axis]);
+                sum = cu_max(sum, child->fixed_size[axis]);
             }
         }
         root->fixed_size[axis] = sum;
@@ -441,10 +471,10 @@ void apply_layout() {
                 blacklist_rect = layer->first->rect;
             }
             for (Box *box = layer->first; box; box = box->next) {
-                blacklist_rect.left = math::min(blacklist_rect.left, box->rect.left);
-                blacklist_rect.right = math::max(blacklist_rect.right, box->rect.right);
-                blacklist_rect.top = math::min(blacklist_rect.top, box->rect.top);
-                blacklist_rect.bottom = math::max(blacklist_rect.bottom, box->rect.bottom);
+                blacklist_rect.left = cu_min(blacklist_rect.left, box->rect.left);
+                blacklist_rect.right = cu_max(blacklist_rect.right, box->rect.right);
+                blacklist_rect.top = cu_min(blacklist_rect.top, box->rect.top);
+                blacklist_rect.bottom = cu_max(blacklist_rect.bottom, box->rect.bottom);
             }
         }
 
@@ -455,7 +485,8 @@ void apply_layout() {
 }
 
 void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event*> &events) {
-    static Font *default_font;
+    cu_local_persist Font *default_font;
+
     if (!ui_state) {
         Arena *ui_arena = make_arena();
         Allocator allocator = arena_allocator(ui_arena);
@@ -471,7 +502,13 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
         };
         ui_draw_data->fallback_texture = texture_create(white_bitmap, 2, 2, TextureFormat::R8_UNorm);
 
-        default_font = font_create(STRZ("fonts/RobotoMono.ttf"), 40);
+        default_font = font_create(STRZ("fonts/seguisb.ttf"), 40);
+
+        u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
+
+        icon_font = font_create(STRZ("fonts/icons.ttf"), 24, icon_font_glyphs, cu_count_of(icon_font_glyphs));
+
+
         ui_state->mx_last_frame = ui_state->my_last_frame = ui_state->mx = ui_state->my = -1;
 
         ui_state->layout_axis_stack.default_value = Axis_Y;
@@ -629,7 +666,7 @@ void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 siz
 
         if (g) {
             Rect dst;
-            dst.left = cursor.x + (g->lsb * font->scale) * scale;
+            dst.left = cursor.x + g->lsb * scale;
             dst.right = dst.left + g->bw * scale;
             dst.top = cursor.y + (font->ascent + g->y_off) * scale;
             dst.bottom = dst.top + g->bh * scale;
@@ -646,9 +683,9 @@ void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 siz
 
         if (code == '\n') {
             cursor.x = position.x;
-            cursor.y += (font->line_skip) * scale;
+            cursor.y += font->line_skip * scale;
         } else {
-            cursor.x += (g->advance * font->scale) * scale;
+            cursor.x += g->advance * scale;
         }
     }
 }
@@ -756,6 +793,12 @@ Signal signal_from_box(Box *box) {
                     set_active_box_key(box->key);
                     ui_state->active_t = 0;
                     clicked = true;
+                }
+                break;
+
+            case os::Event::MouseMove:
+                if ((box->flags & BoxFlag_MouseInput) && is_active_box_key(box->key)) {
+                    signal.dragging = true;
                 }
                 break;
         }

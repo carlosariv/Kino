@@ -35,6 +35,27 @@ union Rect {
     Rect(f32 l, f32 t, f32 r, f32 b) : left(l), top(t), right(r), bottom(b) {}
 };
 
+enum IconKind {
+    ICON_WARNING,
+    ICON_CANCEL,
+    ICON_CHECK_EMPTY,
+    ICON_CHECK,
+    ICON_ARROW_UP,
+    ICON_ARROW_DOWN,
+    ICON_ARROW_LEFT,
+    ICON_ARROW_RIGHT,
+    ICON_TRIANGLE_UP,
+    ICON_TRIANGLE_DOWN,
+    ICON_TRIANGLE_LEFT,
+    ICON_TRIANGLE_RIGHT,
+    ICON_ZOOM_PLUS,
+    ICON_ZOOM_MINUS,
+    ICON_FOLDER,
+    ICON_DOCUMENT,
+    ICON_TRASH,
+    ICON_COUNT
+};
+
 enum PrefSizeKind {
     PrefSizeKind_Nil = 0,
     PrefSizeKind_Pixels,
@@ -185,6 +206,7 @@ struct Signal {
     bool hover;
     bool clicked;
     bool pressed;
+    bool dragging;
 };
 
 struct UIState {
@@ -233,6 +255,7 @@ struct UIState {
 
 extern UIState *ui_state;
 extern DrawData *ui_draw_data;
+extern Font *icon_font;
 
 inline PrefSize pref_size_px(f32 px) {
     PrefSize size;
@@ -283,6 +306,7 @@ inline void push_fixed_x(f32 v) { ui_state->fixed_x_stack.push(v); }
 inline void push_fixed_y(f32 v) { ui_state->fixed_y_stack.push(v); }
 inline void push_fixed_width(f32 v) { ui_state->fixed_width_stack.push(v); }
 inline void push_fixed_height(f32 v) { ui_state->fixed_height_stack.push(v); }
+inline void push_fixed_size(Axis axis, f32 v) { if (axis==Axis_X) ui_state->fixed_width_stack.push(v); else ui_state->fixed_height_stack.push(v); }
 inline void push_font(Font *v) { ui_state->font_stack.push(v); }
 inline void push_font_size(f32 v) { ui_state->font_size_stack.push(v); }
 inline void push_layout_axis(Axis v) { ui_state->layout_axis_stack.push(v); }
@@ -291,6 +315,7 @@ inline void push_child_alignment_y(Alignment v) { ui_state->child_alignment_y_st
 inline void push_text_alignment(Alignment v) { ui_state->text_alignment_stack.push(v); }
 inline void push_pref_width(PrefSize v) { ui_state->pref_width_stack.push(v); }
 inline void push_pref_height(PrefSize v) { ui_state->pref_height_stack.push(v); }
+inline void push_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) ui_state->pref_width_stack.push(v); else ui_state->pref_height_stack.push(v); }
 inline void push_background_color(Vector4 v) { ui_state->background_color_stack.push(v); }
 inline void push_text_color(Vector4 v) { ui_state->text_color_stack.push(v); }
 inline void push_hot_color(Vector4 v) { ui_state->hot_color_stack.push(v); }
@@ -300,6 +325,7 @@ inline void set_next_fixed_x(f32 v) { ui_state->fixed_x_stack.set_next(v); }
 inline void set_next_fixed_y(f32 v) { ui_state->fixed_y_stack.set_next(v); }
 inline void set_next_fixed_width(f32 v) { ui_state->fixed_width_stack.set_next(v); }
 inline void set_next_fixed_height(f32 v) { ui_state->fixed_height_stack.set_next(v); }
+inline void set_next_fixed_size(Axis axis, f32 v) { if (axis==Axis_X) ui_state->fixed_width_stack.set_next(v); else ui_state->fixed_height_stack.set_next(v); }
 inline void set_next_font(Font *v) { ui_state->font_stack.set_next(v); }
 inline void set_next_font_size(f32 v) { ui_state->font_size_stack.set_next(v); }
 inline void set_next_child_alignment_x(Alignment v) { ui_state->child_alignment_x_stack.set_next(v); }
@@ -308,6 +334,7 @@ inline void set_next_text_alignment(Alignment v) { ui_state->text_alignment_stac
 inline void set_next_layout_axis(Axis v) { ui_state->layout_axis_stack.set_next(v); }
 inline void set_next_pref_width(PrefSize v) { ui_state->pref_width_stack.set_next(v); }
 inline void set_next_pref_height(PrefSize v) { ui_state->pref_height_stack.set_next(v); }
+inline void set_next_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) ui_state->pref_width_stack.set_next(v); else ui_state->pref_height_stack.set_next(v); }
 inline void set_next_background_color(Vector4 v) { ui_state->background_color_stack.set_next(v); }
 inline void set_next_text_color(Vector4 v) { ui_state->text_color_stack.set_next(v); }
 inline void set_next_hot_color(Vector4 v) { ui_state->hot_color_stack.set_next(v); }
@@ -350,10 +377,17 @@ bool is_hot_box_key(Key key);
 
 Vector2 get_box_text_position(Box *box);
 
+
+Vector2 get_mouse_cursor();
+
+
+String string_from_icon_kind(IconKind kind, const char *end);
+
+
+Vector2 get_rect_size(Rect rect);
+
 };
 
-#define DEFER_LOOP(Start, End) for (int __d_ = ((Start), 1); __d_; __d_=((End), 0))
+#define UI_ROW() CU_DEFER_LOOP(ui::row_begin(), ui::row_end())
 
-#define UI_ROW() DEFER_LOOP(ui::row_begin(), ui::row_end())
-
-#define UI_Parent(parent) DEFER_LOOP(ui::push_parent((parent)), ui::pop_parent())
+#define UI_Parent(parent) CU_DEFER_LOOP(ui::push_parent((parent)), ui::pop_parent())
