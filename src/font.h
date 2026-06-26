@@ -33,6 +33,13 @@ struct Font {
     int line_skip;
 };
 
+struct FontProvider {
+    Arena *arena;
+    Array<Font*> fonts;
+};
 
+
+
+Font *font_create(String file_name, int line_height, u32 *code_points, int code_point_count);
 Font *font_create(String file_name, int line_height);
 GlyphMetrics *font_get_glyph_metrics(Font *font, u32 code_point);

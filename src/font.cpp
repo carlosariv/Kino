@@ -10,6 +10,8 @@
 #include "font.h"
 #include "texture.h"
 
+FontProvider *font_provider;
+
 GlyphMetrics *font_get_glyph_metrics(Font *font, u32 code_point) {
     GlyphMetrics *glyph = font->default_glyph;
     auto it = font->metrics_table.find(code_point);
@@ -20,6 +22,27 @@ GlyphMetrics *font_get_glyph_metrics(Font *font, u32 code_point) {
 }
 
 Font *font_create(String file_name, int line_height) {
+    u32 start_code_point = 0;
+    u32 end_code_point = '~';
+    u32 *code_points = new u32[end_code_point - start_code_point+1];
+
+    for (u32 code_point = start_code_point; code_point <= end_code_point; code_point++) {
+        code_points[code_point-start_code_point] = code_point;
+    }
+
+    Font *font = font_create(file_name, line_height, code_points, end_code_point - start_code_point);
+
+    delete [] code_points;
+    return font;
+}
+
+Font *font_create(String file_name, int line_height, u32 *code_points, int code_point_count) {
+    if (!font_provider) {
+        Arena *arena = make_arena(cu_megabytes(4));
+        font_provider = New(FontProvider, arena_allocator(arena));
+        font_provider->arena = arena;
+    }
+
     // FILE* File = fopen("C:\\windows\\Fonts\\arial.ttf", "rb");
     // [...]
     // stbtt_fontinfo stbFont;
@@ -77,10 +100,10 @@ Font *font_create(String file_name, int line_height) {
     ascent = roundf(ascent * scale);
     descent = roundf(descent * scale);
 
+    font->scale = scale;
     font->ascent = ascent;
     font->descent = descent;
     font->line_gap = line_gap;
-    font->scale = scale;
 
     stbrp_node nodes[256];
     Array<stbrp_rect> rects;
@@ -92,7 +115,7 @@ Font *font_create(String file_name, int line_height) {
     int bytes_per_pixel = 1;
     int bitmap_width = 512;
     int bitmap_height = 512;
-    u8 *bitmap = new u8[bitmap_width * bitmap_height * bytes_per_pixel];
+    u8 *bitmap = cu_alloc_array(u8, arena_allocator(font_provider->arena), bitmap_width * bitmap_height * bytes_per_pixel);
     memset(bitmap, 0, bitmap_width * bitmap_height * bytes_per_pixel);
 
     stbrp_context rp_ctx;
@@ -103,7 +126,8 @@ Font *font_create(String file_name, int line_height) {
     //NOTE: Get glyph metrics
     u32 start_code_point = 0;
     u32 end_code_point = '~';
-    for (u32 code_point = start_code_point; code_point <= end_code_point; code_point++) {
+    for (int i = 0; i < code_point_count; i++) {
+        u32 code_point = code_points[i];
         if (stbtt_FindGlyphIndex(&info, code_point) == 0) {
             continue;
         }
@@ -163,8 +187,8 @@ Font *font_create(String file_name, int line_height) {
         metrics.bt = y;
         metrics.bw = width;
         metrics.bh = height;
-        metrics.advance = advance_width;
-        metrics.lsb = left_side_bearing;
+        metrics.advance = advance_width * font->scale;
+        metrics.lsb = left_side_bearing * font->scale;
 
         int byte_offset = x + (y * bitmap_width * bytes_per_pixel);
         stbtt_MakeCodepointBitmap(&info, bitmap + byte_offset, width, height, bitmap_width * bytes_per_pixel, scale, scale, code_point);
