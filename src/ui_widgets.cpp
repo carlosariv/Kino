@@ -17,7 +17,7 @@ Box *label(String string) {
 }
 
 Signal button(String string) {
-    Box *box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground|BoxFlag_DrawText|BoxFlag_DrawHotEffects|BoxFlag_DrawActiveEffects, string);
+    Box *box = box_create(BoxFlag_MouseClickable|BoxFlag_DrawBackground|BoxFlag_DrawText|BoxFlag_DrawHotEffects|BoxFlag_DrawActiveEffects, string);
     return signal_from_box(box);
 }
 
@@ -43,7 +43,13 @@ UI_DRAW_PROC(line_edit_draw) {
     String text = make_string_view(ed->txt, ed->len);
 
     draw_rect(box->rect, box->background_color);
-    draw_text(text, box->rect.tl, box->font, box->text_color, box->font_size);
+
+    Vector2 text_position = get_box_text_position(box);
+    f32 max_x = box->rect.x1 - text_position.x;
+    Vector2 text_size = measure_text_size(text, box->font, box->font_size);
+
+
+    draw_text(text, box->rect, box->rect.tl, box->font, box->text_color, box->font_size, max_x, text_size);
     Vector2 cursor = box->rect.tl;
     f32 scale = box->font_size / box->font->line_skip;
     for (int i = 0; i < ed->pos; i++) {
@@ -89,7 +95,7 @@ void line_edit_text_op(u8 **buffer_out, int *pos, int *len, int *capacity, Strin
 
 void line_edit(u8 **buffer, int *pos, int *len, int *capacity, String string) {
     set_next_hover_cursor(os::Cursor_IBeam);
-    Box *box = box_create(BoxFlag_MouseInput|BoxFlag_KeyboardInput|BoxFlag_DrawBackground|BoxFlag_DrawText, string);
+    Box *box = box_create(BoxFlag_MouseClickable|BoxFlag_KeyboardClickable|BoxFlag_DrawBackground|BoxFlag_DrawText, string);
 
     box->text = make_string_view(*buffer, *len);
 
@@ -117,8 +123,7 @@ void line_edit(u8 **buffer, int *pos, int *len, int *capacity, String string) {
     box->draw_proc = line_edit_draw;
 }
 
-ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i64 view_max, i64 view_indices) {
-    ScrollPt new_pt = scroll_pt;
+ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i64 view_max, i64 view_indices) { ScrollPt new_pt = scroll_pt;
     // i64 scroll_indices = view_indices + (view_max - view_min);
     // f32 scroll_ratio = (f32)(view_max - view_min) / (f32)scroll_indices;
 
@@ -136,7 +141,7 @@ ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i6
         set_next_background_color(Vector4(.16f, .16f, .16f, 1.f));
         set_next_pref_width(pct_size(1.f, 1.f));
         set_next_pref_height(pct_size(1.f, 1.f));
-        Box *thumb_cont = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb_cont"));
+        Box *thumb_cont = box_create(BoxFlag_MouseClickable|BoxFlag_DrawBackground, STRZ("##thumb_cont"));
         Vector2 thumb_dim = get_rect_size(thumb_cont->rect);
 
         Signal scroll_sig = signal_from_box(thumb_cont);
@@ -151,7 +156,6 @@ ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i6
 
         f32 thumb_pos = thumb_dim[axis] * ((f32)(scroll_pt.idx+1) / (f32)scroll_indices);
 
-
         UI_Parent(thumb_cont) {
             set_next_fixed_x(0.f);
             set_next_fixed_y(thumb_pos);
@@ -159,7 +163,7 @@ ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i6
             set_next_pref_size(flipped_axis, flipped_size);
             set_next_hover_cursor(os::Cursor_Hand);
             set_next_background_color(Vector4(0.42f, 0.44f, 0.49f, 1.f));
-            Box *thumb_box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb"));
+            Box *thumb_box = box_create(BoxFlag_MouseClickable|BoxFlag_DrawBackground, STRZ("##thumb"));
             Signal thumb_sig = signal_from_box(thumb_box);
             if (thumb_sig.dragging) {
                 Vector2 scroll_pos = get_mouse_cursor() - thumb_cont->rect.tl;

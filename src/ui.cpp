@@ -296,7 +296,7 @@ Vector2 measure_text_size(String text, Font *font, f32 size) {
             w = 0.0f;
             dim.y += font->line_skip * scale;
         } else {
-            w += g->advance * scale;
+            w += g ? g->advance * scale : 0;
         }
     }
     if (w > dim.x) {
@@ -784,11 +784,15 @@ void draw_rect(Rect dst, Rect src, Vector4 color) {
     draw_vertex(tr);
 }
 
-void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 size) {
+void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 color, f32 size, f32 max_x, Vector2 text_size) {
     f32 dpi = os::main_window->dpi;
     // f32 line_height = size * (dpi / 72.f);
     f32 scale = size / font->size;
     draw_set_texture(font->texture);
+
+    const String ellipses = STRZ("...");
+    const f32 ellipses_width = measure_text_size(ellipses, font, size).x;
+    bool trailer_enabled = text_size.x > max_x && ellipses_width < max_x;
 
     Vector2 cursor = position;
     for (isize i = 0; i < text.len; i++) {
@@ -801,6 +805,15 @@ void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 siz
             dst.right = dst.left + g->bw * scale;
             dst.top = cursor.y + (font->ascent + g->y_off) * scale;
             dst.bottom = dst.top + g->bh * scale;
+
+            //- NOTE: Truncate text
+            if (trailer_enabled) {
+                if (dst.right > bounds.x1-ellipses_width) {
+                    // cu_breakpoint();
+                    draw_text(ellipses, bounds, cursor, font, color, size, 1000, Vector2(0, 0));
+                    break;
+                }
+            }
 
             Rect src = Rect(
                 g->bl/font->width,
@@ -816,7 +829,7 @@ void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 siz
             cursor.x = position.x;
             cursor.y += font->line_skip * scale;
         } else {
-            cursor.x += g->advance * scale;
+            cursor.x += g ? g->advance * scale : 0;
         }
     }
 }
@@ -862,68 +875,70 @@ void draw_layout() {
     for (Box *box = root; box; box = box_rec_pre(box, root).next) {
         DrawData *draw_data = ui_draw_data;
 
-        if (box->draw_proc) {
-            box->draw_proc(box, box->draw_data);
-        } else {
-            draw_set_texture(box->font->texture);
+        draw_set_texture(box->font->texture);
 
-            if (box->flags & BoxFlag_DrawBackground) {
-                Vector4 background_color = box->background_color;
-                bool mouse_active = false;
+        if (box->flags & BoxFlag_DrawBackground) {
+            Vector4 background_color = box->background_color;
+            bool mouse_active = false;
 
-                if (box->flags & BoxFlag_DrawHotEffects && key_match(ui_state->hot_box_key, box->key)) {
-                    background_color = box->hot_color * box->hot_t;
-                }
+            if (box->flags & BoxFlag_DrawHotEffects && key_match(ui_state->hot_box_key, box->key)) {
+                background_color = box->hot_color * box->hot_t;
+            }
 
-                if (box->flags & BoxFlag_DrawActiveEffects) {
-                    cu_foreach_enum_val(MouseButtonKind, mouse_kind) {
-                        Key active_key = ui_state->active_box_key[mouse_kind];
-                        if (key_match(active_key, box->key)) {
-                            background_color = box->active_color * box->active_t;
-                            break;
-                        }
+            if (box->flags & BoxFlag_DrawActiveEffects) {
+                cu_foreach_enum_val(MouseButtonKind, mouse_kind) {
+                    Key active_key = ui_state->active_box_key[mouse_kind];
+                    if (key_match(active_key, box->key)) {
+                        background_color = box->active_color * box->active_t;
+                        break;
                     }
                 }
-
-                draw_rect(box->rect, background_color);
             }
 
-            if (box->flags & BoxFlag_DrawBorder) {
-                Rect border_rect = box->rect;
-                box->rect.x0 -= 1.0f;
-                box->rect.y0 -= 1.0f;
-                box->rect.x1 += 1.0f;
-                box->rect.y1 += 1.0f;
+            draw_rect(box->rect, background_color);
+        }
 
-                draw_rect(box->rect, box->border_color);
+        if (box->flags & BoxFlag_DrawBorder) {
+            Rect border_rect = box->rect;
+            box->rect.x0 -= 1.0f;
+            box->rect.y0 -= 1.0f;
+            box->rect.x1 += 1.0f;
+            box->rect.y1 += 1.0f;
+
+            draw_rect(box->rect, box->border_color);
+        }
+
+        if (box->flags & (BoxFlag_DrawTop|BoxFlag_DrawBottom|BoxFlag_DrawLeft|BoxFlag_DrawRight)) {
+            Vector4 border_color = box->border_color;
+            f32 half_thickness = 0.5f;
+            Rect r = box->rect;
+
+            if (box->flags & BoxFlag_DrawTop) {
+                draw_rect(Rect(r.x0, r.y0, r.x1, r.y0 + 2*half_thickness), border_color);
             }
 
-            if (box->flags & (BoxFlag_DrawTop|BoxFlag_DrawBottom|BoxFlag_DrawLeft|BoxFlag_DrawRight)) {
-                Vector4 border_color = box->border_color;
-                f32 half_thickness = 0.5f;
-                Rect r = box->rect;
-
-                if (box->flags & BoxFlag_DrawTop) {
-                    draw_rect(Rect(r.x0, r.y0, r.x1, r.y0 + 2*half_thickness), border_color);
-                }
-
-                if (box->flags & BoxFlag_DrawBottom) {
-                    draw_rect(Rect(r.x0, r.y1 - 2*half_thickness, r.x1, r.y1), border_color);
-                }
-
-                if (box->flags & BoxFlag_DrawLeft) {
-                    draw_rect(Rect(r.x0, r.y0, r.x0 + 2*half_thickness, r.y1), border_color);
-                }
-
-                if (box->flags & BoxFlag_DrawRight) {
-                    draw_rect(Rect(r.x1 - 2*half_thickness, r.y0, r.x1, r.y1), border_color);
-                }
+            if (box->flags & BoxFlag_DrawBottom) {
+                draw_rect(Rect(r.x0, r.y1 - 2*half_thickness, r.x1, r.y1), border_color);
             }
 
-            if (box->flags & BoxFlag_DrawText) {
-                Vector2 text_position = get_box_text_position(box);
-                draw_text(box->text, text_position, box->font, box->text_color, box->font_size);
+            if (box->flags & BoxFlag_DrawLeft) {
+                draw_rect(Rect(r.x0, r.y0, r.x0 + 2*half_thickness, r.y1), border_color);
             }
+
+            if (box->flags & BoxFlag_DrawRight) {
+                draw_rect(Rect(r.x1 - 2*half_thickness, r.y0, r.x1, r.y1), border_color);
+            }
+        }
+
+        if (box->flags & BoxFlag_DrawText) {
+            Vector2 text_position = get_box_text_position(box);
+            f32 max_x = box->rect.x1 - text_position.x;
+            Vector2 text_size = measure_text_size(box->text, box->font, box->font_size);
+            draw_text(box->text, box->rect, text_position, box->font, box->text_color, box->font_size, max_x, text_size);
+        }
+
+        if (box->draw_proc) {
+            box->draw_proc(box, box->draw_data);
         }
     }
 }
@@ -935,7 +950,7 @@ Signal signal_from_box(Box *box) {
     Vector2 mouse = get_mouse_cursor();
     bool mouse_over = mouse_in_rect(box->rect);
     bool hover = false;
-    if (mouse_over && (box->flags & BoxFlag_MouseInput)) {
+    if (mouse_over && (box->flags & BoxFlag_MouseClickable)) {
         hover = true;
         Box *layer_cont = find_layer_container(box);
         for (int d = layer_cont->depth + 1; d < ui_state->blacklist_rects.count; d++) {
@@ -964,7 +979,7 @@ Signal signal_from_box(Box *box) {
 
         switch (evt->type) {
             case os::Event::MousePress: {
-                if (box->flags & BoxFlag_MouseInput && hover) {
+                if (box->flags & BoxFlag_MouseClickable && hover) {
                     ui_state->active_box_key[mouse_kind] = box->key;
                     box->active_t = 0;
                     clicked = true;
@@ -973,7 +988,7 @@ Signal signal_from_box(Box *box) {
             }
 
             case os::Event::MouseMove:
-                if (box->flags & BoxFlag_MouseInput && key_match(ui_state->active_box_key[mouse_kind], box->key)) {
+                if (box->flags & BoxFlag_MouseClickable && key_match(ui_state->active_box_key[mouse_kind], box->key)) {
                     signal.dragging = true;
                 }
                 break;

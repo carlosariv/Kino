@@ -100,24 +100,29 @@ struct PrefSize {
 enum BoxFlags {
     BoxFlag_Default = 0,
 
-    BoxFlag_MouseInput    = (1<<4),
-    BoxFlag_KeyboardInput = (1<<5),
+    BoxFlag_MouseClickable    = (1<<0),
+    BoxFlag_MouseHoverable    = (1<<1),
+    BoxFlag_KeyboardClickable = (1<<2),
 
-    BoxFlag_Layer       = (1<<9),
-    BoxFlag_FloatingX   = (1<<10),
-    BoxFlag_FloatingY   = (1<<11),
-    BoxFlag_FixedWidth  = (1<<12),
-    BoxFlag_FixedHeight = (1<<13),
+    BoxFlag_Layer       = (1<<5),
+    BoxFlag_FloatingX   = (1<<6),
+    BoxFlag_FloatingY   = (1<<7),
+    BoxFlag_FixedWidth  = (1<<8),
+    BoxFlag_FixedHeight = (1<<9),
+    BoxFlag_AllowOverflowX = (1<<10),
+    BoxFlag_AllowOverflowY = (1<<11),
 
     BoxFlag_DrawBackground = (1<<15),
     BoxFlag_DrawText = (1<<16),
+    BoxFlag_DrawBorder = (1<<17),
     BoxFlag_DrawHotEffects = (1<<18),
     BoxFlag_DrawActiveEffects = (1<<19),
-    BoxFlag_DrawBorder = (1<<20),
-    BoxFlag_DrawTop = (1<<21),
-    BoxFlag_DrawBottom = (1<<22),
-    BoxFlag_DrawLeft = (1<<23),
-    BoxFlag_DrawRight = (1<<24),
+    BoxFlag_DrawTop = (1<<20),
+    BoxFlag_DrawBottom = (1<<21),
+    BoxFlag_DrawLeft = (1<<22),
+    BoxFlag_DrawRight = (1<<23),
+
+    BoxFlag_Clip = (1<<30),
 
     BoxFlag_Floating  = (BoxFlag_FloatingX|BoxFlag_FloatingY),
     BoxFlag_FixedSize = (BoxFlag_FixedWidth|BoxFlag_FixedHeight),
@@ -339,9 +344,12 @@ void draw_set_texture(Texture *texture);
 void draw_vertex(Vertex v);
 void draw_rect(Rect rect, Vector4 color);
 void draw_rect(Rect dst, Rect src, Vector4 color);
-void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 size);
+void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 color, f32 size, f32 max_x, Vector2 text_size);
 void draw_box(Box *box);
 void draw_layout();
+
+
+Vector2 measure_text_size(String text, Font *font, f32 size);
 
 
 Vector2 get_box_text_position(Box *box);
