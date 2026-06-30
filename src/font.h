@@ -31,6 +31,7 @@ struct Font {
     int descent;
     int line_gap;
     int line_skip;
+    f32 size;
 };
 
 struct FontProvider {

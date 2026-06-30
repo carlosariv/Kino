@@ -21,7 +21,7 @@ GlyphMetrics *font_get_glyph_metrics(Font *font, u32 code_point) {
     return glyph;
 }
 
-Font *font_create(String file_name, int line_height) {
+Font *font_create(String file_name, int size) {
     u32 start_code_point = 0;
     u32 end_code_point = '~';
     u32 *code_points = new u32[end_code_point - start_code_point+1];
@@ -30,13 +30,13 @@ Font *font_create(String file_name, int line_height) {
         code_points[code_point-start_code_point] = code_point;
     }
 
-    Font *font = font_create(file_name, line_height, code_points, end_code_point - start_code_point);
+    Font *font = font_create(file_name, size, code_points, end_code_point - start_code_point);
 
     delete [] code_points;
     return font;
 }
 
-Font *font_create(String file_name, int line_height, u32 *code_points, int code_point_count) {
+Font *font_create(String file_name, int size, u32 *code_points, int code_point_count) {
     if (!font_provider) {
         Arena *arena = make_arena(cu_megabytes(4));
         font_provider = New(FontProvider, arena_allocator(arena));
@@ -76,6 +76,7 @@ Font *font_create(String file_name, int line_height, u32 *code_points, int code_
     //
 
     Font *font = new Font();
+    font->size = size;
     font->file_name = file_name;
 
     os::Handle file_handle = os::open_file(file_name, os::FileAccessFlag_Read|os::FileAccessFlag_Open);
@@ -95,7 +96,8 @@ Font *font_create(String file_name, int line_height, u32 *code_points, int code_
     int ascent, descent, line_gap;
     stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
 
-    f32 scale = stbtt_ScaleForPixelHeight(&info, line_height);
+    f32 line_height = floorf(96.f/72.f * size);
+    f32 scale = stbtt_ScaleForMappingEmToPixels(&info, line_height);
 
     ascent = roundf(ascent * scale);
     descent = roundf(descent * scale);
