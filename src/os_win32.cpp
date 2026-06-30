@@ -10,10 +10,44 @@ void render_state_init();
 void d3d11_init(HWND hWnd);
 int update_frame();
 
+void __debug_breakpoint() {
+    DebugBreak();
+}
+
 namespace os {
 Window *main_window;
 Array<Event*> window_events;
 LARGE_INTEGER query_performance_frequency;
+Array<Rect> title_bar_rects;
+
+void set_window_minimized() {
+    ShowWindow((HWND)main_window->handle, SW_MINIMIZE);
+}
+
+void set_window_maximized() {
+    HWND hWnd = (HWND)main_window->handle;
+    if (IsMaximized(hWnd)) {
+        ShowWindow(hWnd, SW_RESTORE);
+    } else {
+        ShowWindow(hWnd, SW_MAXIMIZE);
+    }
+}
+
+void set_window_close() {
+    PostMessageA((HWND)main_window->handle, WM_CLOSE, 0, 0);
+}
+
+void clear_title_bar_client_areas() {
+    title_bar_rects.reset();
+}
+
+void push_title_bar_client_area(Rect rect) {
+    title_bar_rects.add(rect);
+}
+
+void push_custom_title_bar(f32 thickness) {
+    main_window->custom_border_thickness = thickness;
+}
 
 WallClock get_wall_clock() {
     LARGE_INTEGER clock;
@@ -119,6 +153,13 @@ void poll_events() {
         delete window_events[i];
     }
     window_events.reset();
+
+    if (GetActiveWindow() == (HWND)main_window->handle) {
+        main_window->focus_active = true;
+    }
+
+    UINT dpi = GetDpiForWindow((HWND)main_window->handle);
+    main_window->dpi = dpi;
 
     MSG msg;
     while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -259,9 +300,14 @@ void get_key(char character, Keycode *code_out, ModFlags *flags_out) {
     *flags_out = flags;
 }
 
+BOOL rect_contains_point(Rect rect, POINT pt) {
+    return rect.left <= pt.x && rect.right > pt.x && rect.top <= pt.y && rect.bottom > pt.y;
+}
+
 LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT result = 0;
-    Window *window = reinterpret_cast<Window*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    // Window *window = reinterpret_cast<Window*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    Window *window = main_window;
 
 
     bool release = false;
@@ -288,20 +334,18 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     Event *evt = nullptr;
 
     switch (msg) {
-        case WM_CREATE: {
+        case WM_CREATE:
             render_state_init();
             d3d11_init(hWnd);
             break;
-        }
 
-        case WM_CLOSE: {
+        case WM_CLOSE:
             evt = push_event(Event::Quit);
-            break;
-        }
+        break;
 
         case WM_SETFOCUS:
             window->focus_active = true;
-            break;
+        break;
 
         case WM_KILLFOCUS:
             window->focus_active = false;
@@ -314,22 +358,141 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 window->focus_active = true;
             break;
 
-        case WM_SIZE:
-        case WM_PAINT: {
+        case WM_SIZE: {
+            window->width = LOWORD(lParam);
+            window->height = HIWORD(lParam);
+        case WM_PAINT:
+            window->is_minimized = IsIconic(hWnd);
             PAINTSTRUCT ps = {0};
             BeginPaint(hWnd, &ps);
             update_frame();
             EndPaint(hWnd, &ps);
             DwmFlush();
-            break;
-        }
+        } break;
+
+        case WM_NCCALCSIZE: {
+            if (window->custom_border) {
+                //- TODO: Need to handle DPI settings. GetSystemMetricsForDpi
+                int padding = GetSystemMetrics(SM_CXPADDEDBORDER);
+                int border_width = GetSystemMetrics(SM_CXFRAME) + padding;
+                int border_height = GetSystemMetrics(SM_CYFRAME) + padding;
+
+                RECT* rect = 0;
+
+                if (wParam) {
+                    rect = ((NCCALCSIZE_PARAMS *) lParam)->rgrc;
+                } else {
+                    rect = (RECT* ) lParam;
+                }
+
+                rect->left += border_width;
+                rect->right -= border_width;
+                rect->bottom -= border_height;
+
+                //- NOTE: Maximized window
+                if (IsZoomed(hWnd)) {
+                    rect->top += border_height;
+                }
+            } else {
+                result = DefWindowProcA(hWnd, msg, wParam, lParam);
+            }
+        } break;
+
+
+        case WM_NCHITTEST: {
+            if (!window->custom_border) {
+                result = DefWindowProcA(hWnd, msg, wParam, lParam);
+            } else {
+                LRESULT hit = DefWindowProcA(hWnd, msg, wParam, lParam);
+
+                bool default_handled = false;
+                switch (hit) {
+                    case HTNOWHERE:
+                    case HTTOPLEFT:
+                    case HTTOPRIGHT:
+                    case HTLEFT:
+                    case HTRIGHT:
+                    case HTBOTTOM:
+                    case HTBOTTOMLEFT:
+                    case HTBOTTOMRIGHT:
+                        default_handled = true;
+                        break;
+                }
+
+                if (!default_handled) {
+                    //- TODO: Need to handle DPI settings. GetSystemMetricsForDpi
+                    int padding = GetSystemMetrics(SM_CXPADDEDBORDER);
+                    int frame_x = GetSystemMetrics(SM_CXFRAME);
+                    int frame_y = GetSystemMetrics(SM_CYFRAME);
+
+                    // Expand the hit test area for resizing
+
+                    POINT window_pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                    POINT pt = window_pt;
+                    ScreenToClient(hWnd, &pt);
+
+                    bool is_over_top_resize = pt.y >= 0 && pt.y < frame_y;
+                    bool is_over_title_bar = pt.y >= 0 && pt.y < window->custom_border_thickness;
+
+                    bool is_over_title_bar_client_area = false;
+                    for (Rect rect : title_bar_rects) {
+                        if (rect_contains_point(rect, pt)) {
+                            is_over_title_bar_client_area = true;
+                            break;
+                        }
+                    }
+
+                    if (IsMaximized(hWnd)) {
+                        if (is_over_title_bar_client_area) {
+                            hit = HTCLIENT;
+                        } else if (is_over_title_bar) {
+                            hit = HTCAPTION;
+                        } else {
+                            hit = HTCLIENT;
+                        }
+                    } else {
+                        if (is_over_title_bar_client_area) {
+                            hit = HTCLIENT;
+                        } else if (is_over_top_resize) {
+                            hit = HTTOP;
+                        } else if (is_over_title_bar) {
+                            hit = HTCAPTION;
+                        } else {
+                            hit = HTCLIENT;
+                        }
+                    }
+                }
+                result = hit;
+            }
+        } break;
+
+        case WM_SETCURSOR: {
+            if (LOWORD(lParam) == HTCLIENT) {
+                HCURSOR hCursor;
+                switch (window->current_cursor) {
+                    default:
+                    case Cursor_Nil:
+                    case Cursor_Arrow:
+                        hCursor = LoadCursor(NULL, IDC_ARROW);
+                        break;
+                    case Cursor_Hand:
+                        hCursor = LoadCursor(NULL, IDC_HAND);
+                        break;
+                    case Cursor_IBeam:
+                        hCursor = LoadCursor(NULL, IDC_IBEAM);
+                        break;
+                }
+                SetCursor(hCursor);
+            } else {
+                result = DefWindowProcA(hWnd, msg, wParam, lParam);
+            }
+        } break;
 
         case WM_KEYUP: {
             evt = push_event(Event::KeyRelease);
             int vk = (int)wParam;
             evt->key = key_from_virtual_keycode(vk);
-            break;
-        }
+        } break;
 
         case WM_SYSKEYDOWN:
         case WM_KEYDOWN: {
@@ -340,14 +503,12 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             wchar_t ch[2];
             int result = ToUnicode(vk, MapVirtualKey(vk, MAPVK_VK_TO_VSC), key_state, ch, 2, 0);
             if (result > 0) {
-                break;
+            } else {
+                evt = push_event(Event::KeyPress);
+                evt->key = key_from_virtual_keycode(vk);
+                evt->mod_flags = get_modifier_flags();
             }
-
-            evt = push_event(Event::KeyPress);
-            evt->key = key_from_virtual_keycode(vk);
-            evt->mod_flags = get_modifier_flags();
-            break;
-        }
+        } break;
 
         case WM_SYSCHAR:
         case WM_CHAR: {
@@ -362,8 +523,7 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             evt->key = key_code;
             evt->mod_flags = mod_flags;
             evt->text = make_string(&ch, 1);
-            break;
-        }
+        } break;
 
         case WM_MOUSEMOVE: {
             if (window->tracking_mouse) {
@@ -384,14 +544,12 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     window->tracking_mouse = true;
                 }
             }
-            break;
-        }
+        } break;
 
         case WM_MOUSELEAVE:
             window->tracking_mouse = false;
             evt = push_event(Event::MouseLeave);
             break;
-
 
         case WM_LBUTTONUP:
         case WM_MBUTTONUP:
@@ -404,26 +562,32 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             evt->key = mouse_wm_to_key();
             evt->mx = GET_X_LPARAM(lParam);
             evt->my = GET_Y_LPARAM(lParam);
-            break;
-        }
+
+            if (release) {
+                ReleaseCapture();
+            } else {
+                SetCapture(hWnd);
+            }
+        } break;
 
         case WM_MOUSEWHEEL: {
             evt = push_event(Event::MouseWheel);
             evt->wheel_delta = HIWORD(wParam) / 120;
             evt->mx = GET_X_LPARAM(lParam);
             evt->my = GET_Y_LPARAM(lParam);
-            break;
-        }
+        } break;
 
         default:
             result = DefWindowProcA(hWnd, msg, wParam, lParam);
             break;
     }
+
     return result;
 }
 
 Window *window_create(int width, int height) {
     Window *window = new Window();
+    window->custom_border = true;
     main_window = window;
 
     WNDCLASSEXA wndclass = {};
@@ -454,17 +618,8 @@ Window *window_create(int width, int height) {
     return window;
 }
 
-Vector2 Window::get_dimension() {
-    RECT rect;
-    GetClientRect((HWND)handle, &rect);
-    return Vector2(rect.right - rect.left, rect.bottom - rect.top);
-}
-
-void Window::get_size(int *width, int *height) {
-    RECT rect;
-    GetClientRect((HWND)handle, &rect);
-    if (width) *width = rect.right - rect.left;
-    if (height) *height = rect.bottom - rect.top;
+Vector2 Window::get_size() {
+    return Vector2(width, height);
 }
 
 void sleep_ms(int ms) {

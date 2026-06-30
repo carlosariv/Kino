@@ -4,18 +4,11 @@
 
 #include "array.h"
 #include "base_types.h"
+#include "utils.h"
 #include "string.h"
 #include "vector.h"
 #include "enum_flags.hpp"
 #include "key_code.h"
-
-
-#ifdef _WIN32
-#define PLATFORM_WINDOWS
-#endif // _WIN32
-#ifdef __linux__
-#define PLATFORM_LINUX
-#endif // __linux__
 
 namespace os {
 
@@ -28,6 +21,13 @@ typedef u64 WallClock;
 extern Array<Event*> window_events;
 extern Window *main_window;
 
+void set_window_minimized();
+void set_window_maximized();
+void set_window_close();
+
+void clear_title_bar_client_areas();
+void push_title_bar_client_area(Rect rect);
+
 enum ModFlags {
     ModFlag_Nil     = 0,
     ModFlag_Alt     = (1<<0),
@@ -35,6 +35,19 @@ enum ModFlags {
     ModFlag_Control = (1<<2),
 };
 ENUM_FLAG_OPERATORS(ModFlags);
+
+enum Cursor {
+    Cursor_Nil,
+    Cursor_Arrow,
+    Cursor_Hand,
+    Cursor_IBeam,
+    Cursor_NS,
+    Cursor_EW,
+    Cursor_NESW,
+    Cursor_NWSE,
+    Cursor_Unavailable,
+    Cursor_COUNT
+};
 
 struct Event {
     enum Type {
@@ -95,19 +108,25 @@ ENUM_FLAG_OPERATORS(FileAccessFlags);
 
 struct Window {
     Handle handle;
-    int width, height;
+    int width = 0;
+    int height = 0;
     int last_cursor_x, last_cursor_y;
     bool destroy_next_frame = false;
     bool capture_cursor = false;
     bool focus_active = false;
     bool tracking_mouse = false;
+    bool is_minimized = false;
+    bool custom_border = false;
+    int custom_border_thickness = 0;
+    int dpi = 96.f;
+
+    Cursor current_cursor = Cursor_Nil;
 
     inline bool is_focused() { return focus_active; }
     inline bool should_close() { return destroy_next_frame; }
 
     void disable_cursor();
-    Vector2 get_dimension();
-    void get_size(int *width, int *height);
+    Vector2 get_size();
 };
 
 WallClock get_wall_clock();
@@ -133,4 +152,8 @@ void sleep_ms(int ms);
 void get_key(char character, Keycode *code_out, ModFlags *flags_out);
 
 Array<File> list_directory_files(String path);
+
+
+void push_custom_title_bar(f32 thickness);
+
 };

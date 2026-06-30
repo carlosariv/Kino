@@ -33,8 +33,9 @@ int main(int argc, char **argv) {
 #endif
 
 int update_frame() {
-    int quit = 0;
     ProfilerZone("This Frame");
+
+    int quit = 0;
 
     static bool first_call = true;
     if (first_call) {
@@ -61,9 +62,9 @@ int update_frame() {
         }
     }
 
-    Vector2 render_dimension = os::main_window->get_dimension();
-
-    ui::per_frame_update(render_dimension, frame_delta, os::window_events);
+    Vector2 render_dim = os::main_window->get_size();
+    
+    ui::per_frame_update(render_dim, frame_delta, os::window_events);
 
     kino::update((f32)frame_delta, os::window_events);
 
@@ -71,7 +72,7 @@ int update_frame() {
 
     {
         ProfilerZone("Renderer");
-        render_frame(render_dimension);
+        render_frame(render_dim);
     }
 
     os::WallClock work_clock = os::get_wall_clock();
