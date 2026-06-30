@@ -59,8 +59,6 @@ void d3d11_on_resize(HWND hWnd, int width, int height) {
     if (width <= 0) width = 1;
     if (height <= 0) height = 1;
 
-    g_render_state->last_resolution = Vector2(width, height);
-
     d3d11_state->device_context->OMSetRenderTargets(0, nullptr, nullptr);
 
     if (d3d11_state->render_target) {
@@ -68,7 +66,7 @@ void d3d11_on_resize(HWND hWnd, int width, int height) {
     }
 
     HRESULT hr;
-    hr = d3d11_state->swap_chain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING);
+    hr = d3d11_state->swap_chain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING);
     if (FAILED(hr)) {
         spdlog::error("D3D11: ResizeBuffers failed {} {}", width, height);
     }
@@ -79,6 +77,9 @@ void d3d11_on_resize(HWND hWnd, int width, int height) {
         spdlog::error("D3D11: GetBuffer failed");
     }
 
+    D3D11_TEXTURE2D_DESC backbuffer_desc;
+    back_buffer->GetDesc(&backbuffer_desc);
+
     D3D11_RENDER_TARGET_VIEW_DESC framebuffer_desc = {};
     framebuffer_desc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM;
     framebuffer_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
@@ -87,6 +88,11 @@ void d3d11_on_resize(HWND hWnd, int width, int height) {
     if (FAILED(hr)) {
         spdlog::error("D3D11: CreateRenderTargetView failed");
     }
+
+    // width = backbuffer_desc.Width;
+    // height = backbuffer_desc.Height;
+
+    g_render_state->last_resolution = Vector2(width, height);
 
     back_buffer->Release();
 
@@ -99,7 +105,7 @@ void d3d11_on_resize(HWND hWnd, int width, int height) {
     vp.TopLeftY = 0;
     d3d11_state->device_context->RSSetViewports(1, &vp);
 
-    if (1) {
+    if (0) {
         if (d3d11_state->depth_stencil_texture) {
             d3d11_state->depth_stencil_texture->Release();
             d3d11_state->depth_stencil_texture = nullptr;
@@ -487,6 +493,11 @@ void render_ui(ui::DrawData *draw_data, Vector2 render_dimension) {
 void render_frame(Vector2 render_dimension) {
     D3D11State *d3d11_state = g_d3d11_state;
 
+    //- NOTE: Do not render when minimized.
+    if (os::main_window->is_minimized) {
+        return;
+    }
+
     bool resize_done = false;
     if (render_dimension.x != g_render_state->last_resolution.x || render_dimension.y != g_render_state->last_resolution.y) {
         HWND hWnd = (HWND)os::main_window->handle;
@@ -494,13 +505,16 @@ void render_frame(Vector2 render_dimension) {
         resize_done = true;
     }
 
+
     float framebuffer_clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     d3d11_state->device_context->ClearRenderTargetView(d3d11_state->render_target, framebuffer_clear);
     if (resize_done) {
         d3d11_state->device_context->Flush();
     }
 
-    d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    if (d3d11_state->depth_stencil_view) {
+        d3d11_state->device_context->ClearDepthStencilView(d3d11_state->depth_stencil_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    }
 
     d3d11_state->device_context->OMSetRenderTargets(1, &d3d11_state->render_target, d3d11_state->depth_stencil_view);
 

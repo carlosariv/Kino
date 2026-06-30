@@ -1,11 +1,19 @@
 #pragma once
 
+#ifdef _WIN32
+#define PLATFORM_WINDOWS
+#endif // _WIN32
+#ifdef __linux__
+#define PLATFORM_LINUX
+#endif // __linux__
+
+
 #define cu_abs(x) ((x) >= 0 ? (x) : -(x))
-#define cu_min(a, b) ((a) < (b) ? (a) : (b))
-#define cu_max(a, b) ((a) >= (b) ? (a) : (b))
-#define cu_clamp(v, min, max) ((v) < (min) ? (min) : (v) > (max) ? (max) : (v))
-#define cu_clamp_bot(v, bottom) (Max(v, bottom))
-#define cu_clamp_top(v, top) (Min(v, top))
+#define cu_min(a,b) ((a) < (b) ? (a) : (b))
+#define cu_max(a,b) ((a) >= (b) ? (a) : (b))
+#define cu_clamp(min,v,max) ((v) < (min) ? (min) : (v) > (max) ? (max) : (v))
+#define cu_clamp_bot(bot,v) (cu_max(v, bot))
+#define cu_clamp_top(v,top) (cu_min(v, top))
 
 #define cu_kilobytes(n) (1024 * (n))
 #define cu_megabytes(n) (1024 * cu_kilobytes(n))
@@ -51,6 +59,11 @@
 #define cu_swap(a,b) do{cu_type_of(a) _tmp = (a); (a) = (b); (b) = _tmp;}while(0)
 #define cu_quick_sort(Arr,T,N,Func) qsort((Arr), (N), sizeof(T), (Func))
 
+#define cu_foreach_enum_val(T, it) for (T it = (T)0; it < T##_COUNT; it=(T)(it+1))
+
+void __debug_breakpoint();
+#define cu_breakpoint __debug_breakpoint
+
 inline Axis flip_axis(Axis axis) {
     if (axis == Axis_X) {
         return Axis_Y;
@@ -58,3 +71,4 @@ inline Axis flip_axis(Axis axis) {
         return Axis_X;
     }
 }
+
