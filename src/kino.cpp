@@ -149,8 +149,8 @@ UI_DRAW_PROC(ui_draw_view);
     //     assert(pane->tl == nullptr);
     //     assert(pane->br == nullptr);
     //
-    //     ui::set_next_pref_width(ui::pref_size_px(pane->dim.x));
-    //     ui::set_next_pref_height(ui::pref_size_px(pane->dim.y));
+    //     ui::set_next_pref_width(ui::pixel_size(pane->dim.x));
+    //     ui::set_next_pref_height(ui::pixel_size(pane->dim.y));
     //     ui::set_next_background_color(Vector4(1, 1, 1, 1));
     //     ui::set_next_text_color(Vector4(0, 0, 0, 1));
     //     if (view == state->console_view) {
@@ -160,8 +160,8 @@ UI_DRAW_PROC(ui_draw_view);
     //     view->box->draw_data = (void *)view;
     //     view->box->draw_proc = ui_draw_view;
     // } else {
-    //     ui::set_next_pref_width(ui::pref_size_px(pane->dim.x));
-    //     ui::set_next_pref_height(ui::pref_size_px(pane->dim.y));
+    //     ui::set_next_pref_width(ui::pixel_size(pane->dim.x));
+    //     ui::set_next_pref_height(ui::pixel_size(pane->dim.y));
     //     ui::set_next_layout_axis(pane->split_axis);
     //     ui::Box *container = ui::box_create(ui::BoxFlag_Default, 0);
     //
@@ -192,7 +192,9 @@ void update(f32 dt, Array<os::Event*> window_events) {
         }
     }
 
-    Vector2 window_dim = os::main_window->get_dimension();
+    Vector2 window_dim = os::main_window->get_size();
+
+    os::clear_title_bar_client_areas();
 
     ui::set_next_fixed_width(window_dim.x);
     ui::set_next_fixed_height(window_dim.y);
@@ -202,12 +204,24 @@ void update(f32 dt, Array<os::Event*> window_events) {
     ui::push_text_color(Vector4(1, 1,1, 1));
     ui::Box *main_cont = ui::box_create(ui::BoxFlag_Layer, STRZ("~MainCont"));
     UI_Parent(main_cont) {
-        ui::set_next_layout_axis(Axis_X);
-        ui::set_next_pref_width(ui::pref_size_parent(1.0f));
-        ui::set_next_pref_height(ui::pref_size_px(28.0f));
-        ui::Box *menu_cont = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("~MenuCont"));
-        UI_Parent(menu_cont) {
+        cu_local_persist f32 debug_t = 0.0f;
+        const f32 debug_max = 0.8f;
+        debug_t += dt;
+        if (debug_t > debug_max) {
+            debug_t = 0.0f;
+        }
 
+        ui::set_next_layout_axis(Axis_X);
+        ui::set_next_pref_width(ui::pct_size(1.f, 1.f));
+        ui::set_next_pref_height(ui::pixel_size(28.0f, 1.f));
+        if (debug_t < 0.5f*debug_max) {
+            ui::set_next_background_color(Vector4(1, 0, 0, 1));
+        } else {
+            ui::set_next_background_color(Vector4(0, 0, 0, 1));
+        }
+        ui::Box *title_bar = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##titlebar"));
+        os::push_custom_title_bar(ui::get_rect_size(title_bar->rect).y);
+        UI_Parent(title_bar) {
             String menu_items[] = {
                 STRZ("File"),
                 STRZ("Edit"),
@@ -218,23 +232,49 @@ void update(f32 dt, Array<os::Event*> window_events) {
 
             for (int i = 0; i < cu_count_of(menu_items); i++) {
                 String item = menu_items[i];
-                ui::set_next_pref_height(ui::pref_size_parent(1.0f));
-                ui::set_next_pref_width(ui::pref_size_text(8.0f));
+                ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
+                ui::set_next_pref_width(ui::text_size(8.f, 1.f));
                 ui::Signal sig = ui::button(item);
+                os::push_title_bar_client_area(sig.box->rect);
             }
 
-            ui::set_next_pref_height(ui::pref_size_parent(1.0f));
-            ui::set_next_pref_width(ui::pref_size_text(8.0f));
-            ui::set_next_font(ui::icon_font);
-            ui::set_next_text_color(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-            ui::button(ui::string_from_icon_kind(ui::ICON_WARNING, "##arrow_up"));
+            ui::spacer(ui::pct_size(1.f, 0.f));
+
+            ui::push_pref_height(ui::pct_size(2.f, 1.f));
+            ui::push_pref_width(ui::text_size(8.f, 1.f));
+            ui::push_font(ui::icon_font);
+            ui::push_text_color(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+            ui::push_font_size(14.0f);
+            {
+                ui::Signal min_sig = ui::button(ui::string_from_icon_kind(ui::IconKind_WindowMinimize, "##min"));
+                ui::Signal max_sig = ui::button(ui::string_from_icon_kind(ui::IconKind_WindowMaximize, "##max"));
+                ui::Signal close_sig = ui::button(ui::string_from_icon_kind(ui::IconKind_Cancel, "##close"));
+                if (min_sig.clicked) {
+                    os::set_window_minimized();
+                }
+                if (max_sig.clicked) {
+                    os::set_window_maximized();
+                }
+                if (close_sig.clicked) {
+                    os::set_window_close();
+                }
+
+                os::push_title_bar_client_area(min_sig.box->rect);
+                os::push_title_bar_client_area(max_sig.box->rect);
+                os::push_title_bar_client_area(close_sig.box->rect);
+            }
+            ui::pop_pref_height();
+            ui::pop_pref_width();
+            ui::pop_font();
+            ui::pop_font_size();
+            ui::pop_text_color();
         }
 
         View *view = get_active_view();
-        ui::set_next_pref_width(ui::pref_size_px(window_dim.x));
-        ui::set_next_pref_height(ui::pref_size_px(window_dim.y));
-        ui::set_next_background_color(Vector4(0.11f, 0.11f, 0.1f, 1.0f));
-        ui::set_next_text_color(Vector4(0.85f, 0.82f, 0.75f, 1.0f));
+        ui::set_next_pref_width(ui::pct_size(1.f, 1.f));
+        ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
+        ui::set_next_background_color(Vector4(.11f, .11f, .1f, 1.f));
+        ui::set_next_text_color(Vector4(.85f, .82f, .75f, 1.f));
         view->box = ui::box_create(ui::BoxFlag_MouseInput|ui::BoxFlag_KeyboardInput, string_fmt("##view_%lld", view->id));
         view->box->draw_data = (void *)view;
         view->box->draw_proc = ui_draw_view;
@@ -243,28 +283,30 @@ void update(f32 dt, Array<os::Event*> window_events) {
 
     FileSystem *fs = g_file_system;
 
-    ui::push_background_color(Vector4(0.14f, 0.14f, 0.13f, 1.0f));
+    ui::push_background_color(Vector4(.11f, .12f, .17f, 1.f));
     ui::push_text_color(Vector4(0.85f, 0.82f, 0.75f, 1.0f));
-    ui::set_next_fixed_width(window_dim.x);
-    ui::set_next_fixed_height(window_dim.y);
     ui::set_next_fixed_x(0.0f);
     ui::set_next_fixed_y(0.0f);
+    ui::set_next_pref_width(ui::pct_size(1.f, 1.f));
+    ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
     ui::set_next_child_alignment_x(ui::Alignment_Center);
     ui::set_next_child_alignment_y(ui::Alignment_Center);
     ui::Box *file_system_layer = ui::box_create(ui::BoxFlag_Layer, STRZ("##fsLayer"));
     UI_Parent(file_system_layer) {
-        ui::set_next_pref_width(ui::pref_size_parent(0.5f));
-        ui::set_next_pref_height(ui::pref_size_parent(0.9f));
+        ui::set_next_pref_width(ui::pct_size(.5f, 1.f));
+        ui::set_next_pref_height(ui::pct_size(.9f, 1.f));
         ui::set_next_layout_axis(Axis_X);
-        ui::Box *file_system_cont = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##fsContainer"));
+        ui::set_next_child_alignment_x(ui::Alignment_Center);
+        ui::set_next_border_color(Vector4(0.65f, 0.67f, 0.8f, 1.f));
+        ui::Box *file_system_cont = ui::box_create(ui::BoxFlag_DrawBackground|ui::BoxFlag_DrawBorder, STRZ("##fsContainer"));
 
         UI_Parent(file_system_cont) {
             // File Buttons
-            ui::set_next_fixed_width(400.0f);
-            ui::set_next_pref_height(ui::pref_size_parent(1.0f));
-            UI_Parent(ui::box_create(ui::BoxFlag_Default, STRZ("##file_buttons"))) {
-                ui::push_pref_width(ui::pref_size_text(4.0f));
-                ui::push_pref_height(ui::pref_size_text(4.0f));
+            ui::set_next_pref_width(ui::pct_size(1.f, 0.1f));
+            ui::set_next_pref_height(ui::pct_size(1.f, 0.1f));
+            UI_Parent(ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##file_buttons"))) {
+                ui::push_pref_width(ui::pct_size(1.f, 0.f));
+                ui::push_pref_height(ui::text_em_size(2.f, 1.f));
 
                 struct LineEdit {
                     u8 *buffer;
@@ -277,10 +319,28 @@ void update(f32 dt, Array<os::Event*> window_events) {
 
                 ui::line_edit(&ed.buffer, &ed.pos, &ed.len, &ed.capacity, STRZ("##file_line"));
 
-                for (int i = 0; i < fs->files.count; i++) {
+                for (int i = 0; i < cu_clamp_top(fs->files.count, 14); i++) {
                     os::File *file = &fs->files[i];
-                    ui::Signal sig = ui::button(string_fmt("%s##file_%d", file->file_name.text, i));
-                    if (sig.clicked) {
+                    ui::set_next_border_color(Vector4(0.33f, 0.43f, 0.51f, 1.f));
+                    if (i %2 == 0) ui::set_next_background_color(Vector4(.094f, .102f, .153f, 1.f));
+
+                    ui::set_next_layout_axis(Axis_X);
+                    ui::set_next_pref_width(ui::pct_size(1.f, 0.1f));
+                    ui::Box *row = ui::box_create(ui::BoxFlag_MouseInput|ui::BoxFlag_DrawBackground|ui::BoxFlag_DrawBottom|ui::BoxFlag_DrawHotEffects, string_fmt("##file_%d", i));
+                    UI_Parent(row) {
+                        ui::set_next_pref_width(ui::text_size(4.f, 1.f));
+                        ui::set_next_pref_height(ui::text_size(4.f, 1.f));
+                        ui::set_next_font(ui::icon_font);
+                        ui::set_next_text_color(Vector4(0.98f, 0.73f, 0.11f, 1.f));
+                        ui::label(ui::string_from_icon_kind(ui::IconKind_Folder, "##folder"));
+
+                        ui::set_next_pref_width(ui::text_size(4.f, 1.f));
+                        ui::set_next_pref_height(ui::text_size(4.f, 1.f));
+                        ui::label(string_fmt("%s##file_%d", file->file_name.text, i));
+                    }
+
+                    ui::Signal row_sig = ui::signal_from_box(row);
+                    if (row_sig.clicked) {
                         printf("%s\n", (char *)file->file_name.text);
                     }
                 }
@@ -290,12 +350,9 @@ void update(f32 dt, Array<os::Event*> window_events) {
             }
 
             cu_local_persist ui::ScrollPt scroll_pt = {};
+            int visible_line_count = (file_system_cont->rect.bottom - file_system_cont->rect.top) / (ui::top_font_size() + 8.0f);
 
-            ui::set_next_fixed_width(10.0f);
-            ui::set_next_pref_height(ui::pref_size_parent(1.0f));
-            ui::set_next_background_color(Vector4(1, 0.2, 0.2, 1.0f));
-
-            scroll_pt = ui::scroll_bar(STRZ("##scroll"), Axis_Y, scroll_pt, 0, 12, 20);
+            scroll_pt = ui::scroll_bar(STRZ("##scroll"), Axis_Y, scroll_pt, 0, 12, visible_line_count);
         }
     }
     ui::pop_background_color();
@@ -343,7 +400,7 @@ UI_DRAW_PROC(ui_draw_view) {
         g = font_get_glyph_metrics(font, buffer_text.text[view->cursor.pos]);
     }
 
-    ui::Rect dst = ui::Rect(
+    Rect dst = Rect(
         cursor.x, // cursor.x + g->lsb * font->scale,
         cursor.y, // + font->ascent + g->y_off,
         cursor.x + 2.0f, // cursor.x + (g->lsb * font->scale) + g->bw,
