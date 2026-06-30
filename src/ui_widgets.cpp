@@ -4,15 +4,20 @@
 
 namespace ui {
 
+Signal spacer(PrefSize size) {
+    Box *parent = top_parent();
+    ui::set_next_pref_size(parent->child_layout_axis, size);
+    Box *box = box_create(BoxFlag_Default, key_zero());
+    return signal_from_box(box);
+}
+
 Box *label(String string) {
-    set_next_pref_width(pref_size_text(0.0f));
-    set_next_pref_height(pref_size_text(0.0f));
-    Box *box = box_create(BoxFlag_DrawBackground|BoxFlag_DrawText, string);
+    Box *box = box_create(BoxFlag_DrawText, string);
     return box;
 }
 
 Signal button(String string) {
-    Box *box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground|BoxFlag_DrawText, string);
+    Box *box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground|BoxFlag_DrawText|BoxFlag_DrawHotEffects|BoxFlag_DrawActiveEffects, string);
     return signal_from_box(box);
 }
 
@@ -83,13 +88,14 @@ void line_edit_text_op(u8 **buffer_out, int *pos, int *len, int *capacity, Strin
 }
 
 void line_edit(u8 **buffer, int *pos, int *len, int *capacity, String string) {
+    set_next_hover_cursor(os::Cursor_IBeam);
     Box *box = box_create(BoxFlag_MouseInput|BoxFlag_KeyboardInput|BoxFlag_DrawBackground|BoxFlag_DrawText, string);
 
     box->text = make_string_view(*buffer, *len);
 
     Signal sig = signal_from_box(box);
 
-    if (is_hot_box_key(box->key)) {
+    if (key_match(ui_state->hot_box_key, box->key)) {
         for (os::Event *evt  : os::window_events) {
             switch (evt->type) {
                 case os::Event::KeyPress:
@@ -113,23 +119,23 @@ void line_edit(u8 **buffer, int *pos, int *len, int *capacity, String string) {
 
 ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i64 view_max, i64 view_indices) {
     ScrollPt new_pt = scroll_pt;
-
     // i64 scroll_indices = view_indices + (view_max - view_min);
     // f32 scroll_ratio = (f32)(view_max - view_min) / (f32)scroll_indices;
-
 
     i64 scroll_indices = view_indices;
 
     Axis flipped_axis = flip_axis(axis);
-    set_next_layout_axis(axis);
-    set_next_pref_height(pref_size_parent(1.0f));
-    push_pref_width(pref_size_px(20.0f));
-    Box *container = box_create(BoxFlag_DrawBackground, name);
-    UI_Parent(container) {
-        // ui::push_pref_height(pref_size_parent(1.0f));
-        // ui::pop_pref_size(axis);
+    PrefSize axis_size = pct_size(1.f, 1.f);
+    PrefSize flipped_size = pixel_size(20.f, 1.f);
 
-        set_next_background_color(Vector4(.24f, .25f, .25f, 1.0f));
+    set_next_layout_axis(axis);
+    set_next_pref_size(axis, axis_size);
+    set_next_pref_size(flipped_axis, flipped_size);
+    Box *container = box_create(BoxFlag_Default, name);
+    UI_Parent(container) {
+        set_next_background_color(Vector4(.16f, .16f, .16f, 1.f));
+        set_next_pref_width(pct_size(1.f, 1.f));
+        set_next_pref_height(pct_size(1.f, 1.f));
         Box *thumb_cont = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb_cont"));
         Vector2 thumb_dim = get_rect_size(thumb_cont->rect);
 
@@ -141,28 +147,28 @@ ScrollPt scroll_bar(String name, Axis axis, ScrollPt scroll_pt, i64 view_min, i6
             // printf("CLICKED %lld %f %f\n", new_pt.idx, scroll_pos.x, scroll_pos.y);
         }
 
-
         f32 scroll_ratio = 1.0f / (f32)scroll_indices;
 
         f32 thumb_pos = thumb_dim[axis] * ((f32)(scroll_pt.idx+1) / (f32)scroll_indices);
-        // printf("THUMB POS: %f\n", thumb_pos);
-        set_next_parent(thumb_cont);
-        set_next_fixed_x(0.f);
-        set_next_fixed_y(thumb_pos);
-        set_next_pref_size(axis, pref_size_parent(scroll_ratio));
-        // set_next_hover_cursor(OS_CURSOR_HAND);
-        set_next_background_color(Vector4(1, 0, 0, 1));
-        Box *thumb_box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb"));
-        Signal thumb_sig = signal_from_box(thumb_box);
-        if (thumb_sig.dragging) {
-            Vector2 scroll_pos = get_mouse_cursor() - thumb_cont->rect.tl;
-            new_pt.idx = (i64)(scroll_pos[axis] / (thumb_dim[axis] / (f32)view_indices));
+
+
+        UI_Parent(thumb_cont) {
+            set_next_fixed_x(0.f);
+            set_next_fixed_y(thumb_pos);
+            set_next_pref_size(axis, pct_size(scroll_ratio, 1.f));
+            set_next_pref_size(flipped_axis, flipped_size);
+            set_next_hover_cursor(os::Cursor_Hand);
+            set_next_background_color(Vector4(0.42f, 0.44f, 0.49f, 1.f));
+            Box *thumb_box = box_create(BoxFlag_MouseInput|BoxFlag_DrawBackground, STRZ("##thumb"));
+            Signal thumb_sig = signal_from_box(thumb_box);
+            if (thumb_sig.dragging) {
+                Vector2 scroll_pos = get_mouse_cursor() - thumb_cont->rect.tl;
+                new_pt.idx = (i64)(scroll_pos[axis] / (thumb_dim[axis] / (f32)view_indices));
+            }
         }
     }
-    pop_pref_width();
 
-
-    new_pt.idx = cu_clamp(new_pt.idx, 0, view_indices - 1);
+    new_pt.idx = cu_clamp(0, new_pt.idx,  view_indices - 1);
     return new_pt;
 }
 

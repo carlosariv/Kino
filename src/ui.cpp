@@ -7,6 +7,11 @@
 #include "math.h"
 #include "utils.h"
 
+#define UI_GEN_AUTO_POP(Type,Name) ui_state->Name ## _stack.auto_pop();
+#define UI_AUTO_POP_STACKS UI_PARAM_LIST(UI_GEN_AUTO_POP)
+
+#define UI_GEN_CLEAR(Type,Name) ui_state->Name ## _stack.clear();
+#define UI_CLEAR_STACKS UI_PARAM_LIST(UI_GEN_CLEAR)
 
 namespace ui {
 
@@ -19,23 +24,33 @@ Arena *get_build_arena() {
 }
 
 char *icon_kind_strings[] = {
-    "W",
-    "x",
-    "!",
-    "1",
-    "U",
-    "D",
-    "L",
-    "R",
-    "9",
-    "0",
-    "7",
-    "8",
-    "{",
-    "}",
+    "\0",
+    "A",
+    "B",
     "C",
+    "D",
+    "E",
     "F",
-    "#",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
 };
 
 String string_from_icon_kind(IconKind kind, const char *end) {
@@ -61,20 +76,12 @@ bool mouse_in_rect(Rect rect) {
     return point_in_rect(pt, rect);
 }
 
-bool is_hot_box_key(Key key) {
-    return ui_state->hot_box_key == key;
+bool key_match(Key a, Key b) {
+    return a == b;
 }
 
-bool is_active_box_key(Key key) {
-    return ui_state->active_box_key == key;
-}
-
-void set_hot_box_key(Key key) {
-    ui_state->hot_box_key = key;
-}
-
-void set_active_box_key(Key key) {
-    ui_state->active_box_key = key;
+Key key_zero() {
+    return (Key)0;
 }
 
 // FNV-1
@@ -97,6 +104,7 @@ Key get_seed_key(Box *parent) {
     while (parent) {
         if (parent->key != 0) {
             seed = parent->key;
+            break;
         }
         parent = parent->parent;
     }
@@ -131,45 +139,7 @@ void push_box_to_parent(Box *parent, Box *box) {
         parent->last->next = box;
         parent->last = box;
     }
-}
-
-
-void clear_params() {
-    ui_state->parent_stack.clear();
-    ui_state->fixed_x_stack.clear();
-    ui_state->fixed_y_stack.clear();
-    ui_state->fixed_width_stack.clear();
-    ui_state->fixed_height_stack.clear();
-    ui_state->font_stack.clear();
-    ui_state->font_size_stack.clear();
-    ui_state->child_alignment_x_stack.clear();
-    ui_state->child_alignment_y_stack.clear();
-    ui_state->text_alignment_stack.clear();
-    ui_state->layout_axis_stack.clear();
-    ui_state->pref_width_stack.clear();
-    ui_state->pref_height_stack.clear();
-    ui_state->background_color_stack.clear();
-    ui_state->text_color_stack.clear();
-    ui_state->hot_color_stack.clear();
-}
-
-void auto_pop_params() {
-    ui_state->parent_stack.auto_pop();
-    ui_state->fixed_x_stack.auto_pop();
-    ui_state->fixed_y_stack.auto_pop();
-    ui_state->fixed_width_stack.auto_pop();
-    ui_state->fixed_height_stack.auto_pop();
-    ui_state->font_stack.auto_pop();
-    ui_state->font_size_stack.auto_pop();
-    ui_state->child_alignment_x_stack.auto_pop();
-    ui_state->child_alignment_y_stack.auto_pop();
-    ui_state->text_alignment_stack.auto_pop();
-    ui_state->layout_axis_stack.auto_pop();
-    ui_state->pref_width_stack.auto_pop();
-    ui_state->pref_height_stack.auto_pop();
-    ui_state->background_color_stack.auto_pop();
-    ui_state->text_color_stack.auto_pop();
-    ui_state->hot_color_stack.auto_pop();
+    box->child_count++;
 }
 
 Box *find_layer_container(Box *box) {
@@ -208,6 +178,7 @@ Box *box_create(BoxFlags flags, Key key) {
     box->prev = nullptr;
     box->first = nullptr;
     box->last = nullptr;
+    box->child_count = 0;
 
     Box *parent = top_parent();
     if (flags & BoxFlag_Layer) {
@@ -225,8 +196,10 @@ Box *box_create(BoxFlags flags, Key key) {
     box->child_alignment[Axis_Y] = top_child_alignment_y();
     box->text_alignment = top_text_alignment();
     box->background_color = top_background_color();
+    box->border_color = top_border_color();
     box->text_color = top_text_color();
-    box->hot_color = Vector4(0.0f, 0.47f, 0.65f, 1.0f);
+    box->hot_color = top_hot_color();
+    box->active_color = top_active_color();
 
     if (!ui_state->fixed_x_stack.is_empty()) {
         box->flags |= BoxFlag_FloatingX;
@@ -250,7 +223,9 @@ Box *box_create(BoxFlags flags, Key key) {
         box->pref_size[Axis_Y] = top_pref_height();
     }
 
-    auto_pop_params();
+    box->hover_cursor = top_hover_cursor();
+
+    UI_AUTO_POP_STACKS;
 
     return box;
 }
@@ -264,12 +239,24 @@ String get_hash_part(String string) {
     return hash_part;
 }
 
+Key get_active_seed_key() {
+    Key key = 0;
+    Box *keyed_ancestor = nullptr;
+    Box *parent = top_parent();
+    for (Box *p = parent; p; p = p->parent) {
+        if (p->key != 0) {
+            keyed_ancestor = p;
+            break;
+        }
+    }
+    if (keyed_ancestor) {
+        key = keyed_ancestor->key;
+    }
+    return key;
+}
+
 Box *box_create(BoxFlags flags, String string) {
     Box *parent = top_parent();
-    Key seed = 0;
-    if (parent) {
-        seed = get_seed_key(parent);
-    }
 
     String hash_part = string;
     isize hash_start = string_find(string, STRZ("##"));
@@ -277,7 +264,7 @@ Box *box_create(BoxFlags flags, String string) {
         hash_part = substring(string, hash_start, string.len);
     }
 
-    Key key = get_hash_key(seed, hash_part);
+    Key key = get_hash_key(get_active_seed_key(), hash_part);
     Box *box = box_create(flags, key);
 
     if (flags & BoxFlag_DrawText) {
@@ -293,7 +280,9 @@ Box *box_create(BoxFlags flags, String string) {
 }
 
 Vector2 measure_text_size(String text, Font *font, f32 size) {
-    f32 scale = size / font->line_skip;
+    f32 dpi = os::main_window->dpi;
+    // f32 line_height = size * (dpi / 72.f);
+    f32 scale = size / font->size;
     Vector2 dim = Vector2(0, font->line_skip * scale);
     f32 w = 0.0f;
     for (isize i = 0; i < text.len; i++) {
@@ -317,130 +306,237 @@ Vector2 measure_text_size(String text, Font *font, f32 size) {
     return dim;
 }
 
-void layout_calc_fixed_sizes(Box *root, Axis axis) {
-    if (!(root->flags & (BoxFlag_FixedWidth<<axis))) {
-        f32 value = 0.0f;
-        switch (root->pref_size[axis].kind) {
-            case PrefSizeKind_Pixels:
-                value = root->pref_size[axis].value;
-                break;
-            case PrefSizeKind_TextContent: {
-                f32 padding = root->pref_size[axis].value;
-                value = measure_text_size(root->text, root->font, root->font_size)[axis];
-                value += padding * 2.0f;
-                break;
-            }
-        }
-        root->fixed_size[axis] = value;
-    }
+struct BoxRec {
+    Box *next;
+    int push_count;
+    int pop_count;
+};
 
-    for (Box *child = root->first; child; child = child->next) {
-        layout_calc_fixed_sizes(child, axis);
+
+BoxRec box_rec_pre(Box *box, Box *root) {
+    BoxRec result = {};
+    if (box->first) {
+        result.next = box->first;
+        result.push_count = 1;
+    } else for (Box *p = box; p && p != root; p = p->parent) {
+        if (p->next) {
+            result.next = p->next;
+            break;
+        }
+        result.pop_count += 1;
+    }
+    return result;
+}
+
+void layout_calc_fixed_sizes(Box *root, Axis axis) {
+    for (Box *box = root; box; box = box_rec_pre(box, root).next) {
+        if (!(box->flags & (BoxFlag_FixedWidth<<axis))) {
+            f32 value = 0.0f;
+            switch (box->pref_size[axis].kind) {
+                case PrefSizeKind_Pixels:
+                    value = box->pref_size[axis].value;
+                    break;
+                case PrefSizeKind_TextContent: {
+                    f32 padding = box->pref_size[axis].value;
+                    value = measure_text_size(box->text, box->font, box->font_size)[axis];
+                    value += padding * 2.0f;
+                    break;
+                }
+            }
+            box->fixed_size[axis] = value;
+        }
     }
 }
 
 void layout_calc_upwards_dependent_sizes(Box *root, Axis axis) {
-    if (root->pref_size[axis].kind == PrefSizeKind_ParentPct) {
-        f32 pct = root->pref_size[axis].value;
+    for (Box *box = root; box; box = box_rec_pre(box, root).next) {
+        if (box->pref_size[axis].kind == PrefSizeKind_ParentPct) {
+            f32 pct = box->pref_size[axis].value;
 
-        Box *fixed_parent = nullptr;
-        for (Box *p = root->parent; p && !fixed_parent; p = p->parent) {
-            if (p->flags & BoxFlag_FixedWidth<<axis
-                || p->pref_size[axis].kind==PrefSizeKind_ParentPct
-                || p->pref_size[axis].kind==PrefSizeKind_Pixels
-                || p->pref_size[axis].kind==PrefSizeKind_TextContent) {
-                fixed_parent = p;
-                break;
+            Box *fixed_parent = nullptr;
+            for (Box *p = box->parent; p && !fixed_parent; p = p->parent) {
+                if (p->flags & BoxFlag_FixedWidth<<axis
+                    || p->pref_size[axis].kind==PrefSizeKind_ParentPct
+                    || p->pref_size[axis].kind==PrefSizeKind_Pixels
+                    || p->pref_size[axis].kind==PrefSizeKind_TextContent) {
+                    fixed_parent = p;
+                    break;
+                }
             }
+
+            box->fixed_size[axis] = pct * fixed_parent->fixed_size[axis];
         }
-
-        root->fixed_size[axis] = pct * fixed_parent->fixed_size[axis];
-    }
-
-    for (Box *child = root->first; child; child = child->next) {
-        layout_calc_upwards_dependent_sizes(child, axis);
     }
 }
 
 void layout_calc_downwards_dependent_sizes(Box *root, Axis axis) {
-    for (Box *child = root->first; child; child = child->next) {
-        layout_calc_downwards_dependent_sizes(child, axis);
-    }
+    BoxRec rec = {};
+    for (Box *b = root; b; b = rec.next) {
+        rec = box_rec_pre(b, root);
+        int pop_index = 0;
 
-    if (root->pref_size[axis].kind == PrefSizeKind_ChildrenSum) {
-        f32 sum = 0.0f;
-        for (Box *child = root->first; child; child = child->next) {
-            if (root->child_layout_axis == axis) {
-                sum += child->fixed_size[axis];
-            } else {
-                sum = cu_max(sum, child->fixed_size[axis]);
+        for (Box *box = b; b && pop_index <= rec.pop_count; box = box->parent, pop_index += 1) {
+            if (box->pref_size[axis].kind == PrefSizeKind_ChildrenSum) {
+                f32 sum = 0.0f;
+                for (Box *child = box->first; child; child = child->next) {
+                    if (box->child_layout_axis == axis) {
+                        sum += child->fixed_size[axis];
+                    } else {
+                        sum = cu_max(sum, child->fixed_size[axis]);
+                    }
+                }
+                box->fixed_size[axis] = sum;
             }
         }
-        root->fixed_size[axis] = sum;
+    }
+}
+
+void layout_enforce_constraints(Box *root, Axis axis) {
+    for (Box *box = root; box; box = box_rec_pre(box, root).next) {
+        //- NOTE: Layers do not get to resolve violation constraints because layers are independent from each other layout-wise so sizes do not get violated at the layer level.
+        if (box==ui_state->root || box->flags & BoxFlag_Layer) {
+            continue;
+        }
+
+        //- NOTE: Fix children sizes along non-layout direction
+        if (axis != box->child_layout_axis) {
+            f32 allowed_size = box->fixed_size[axis];
+            for (Box *child = box->first; child; child = child->next) {
+                f32 child_size = child->fixed_size[axis];
+
+                f32 fixup = child_size - allowed_size;
+                f32 max_fixup = child_size;
+                fixup = cu_clamp(0, fixup, max_fixup);
+
+                if (fixup > 0) {
+                    // printf("NL axis:%d box:%lld: child_size:%f allowed:%f\n", axis, box->key, child_size, allowed_size);
+                    child->fixed_size[axis] -= fixup;
+                }
+            }
+        }
+
+        //- NOTE: Fix children sizes along layout direction
+        if (axis == box->child_layout_axis) {
+            f32 allowed_size = box->fixed_size[axis];
+            f32 total_size = 0;
+            f32 total_weighted_size = 0;
+            for (Box *child = box->first; child; child = child->next) {
+                total_size += child->fixed_size[axis];
+                total_weighted_size += child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
+            }
+
+            f32 violation = total_size - allowed_size;
+
+            if (violation > 0 && total_weighted_size > 0) {
+                // printf("L axis:%d box:%lld total:%f allowed:%f\n", axis, box->key, total_size, allowed_size);
+                Array<f32> children_fixups;
+                {
+                    int child_index = 0;
+                    for (Box *child = box->first; child; child = child->next, child_index += 1) {
+                        f32 fixup = child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
+                        fixup = cu_clamp_bot(0, fixup);
+                        children_fixups.add(fixup);
+                    }
+                }
+
+                {
+                    int child_index = 0;
+                    for (Box *child = box->first; child; child = child->next, child_index += 1) {
+                        f32 fixup = children_fixups[child_index];
+                        f32 fixup_pct = violation / total_weighted_size;
+                        fixup_pct = cu_clamp(0, fixup_pct, 1);
+                        child->fixed_size[axis] -= fixup * fixup_pct;
+                    }
+                }
+
+                children_fixups.release();
+            }
+        }
+
+        //- NOTE: Only on overflow
+        // for (Box *child = box->first; child; child = child->next) {
+        //     if (child->pref_size[axis].kind == PrefSizeKind_ParentPct)  {
+        //         child->fixed_size[axis] = box->fixed_size[axis] * child->pref_size[axis].value;
+        //     }
+        // }
     }
 }
 
 void layout_place_boxes(Box *root, Axis axis) {
-    f32 layout_position = 0.0f;
+    for (Box *box = root; box; box = box_rec_pre(box, root).next) {
+        f32 layout_position = 0.0f;
+        f32 gap = 0.0f;
 
-    if (root->child_layout_axis == axis) {
-        switch (root->child_alignment[axis]) {
-            case Alignment_Start:
-                layout_position = 0.0f;
-                break;
-            case Alignment_Center: {
-                f32 actual_content_size = 0.0f;
-                for (Box *child = root->first; child; child = child->next) {
-                    actual_content_size += child->fixed_size[axis];
+        if (box->child_layout_axis == axis) {
+            switch (box->child_alignment[axis]) {
+                case Alignment_Start:
+                    layout_position = 0.0f;
+                    break;
+                case Alignment_Center: {
+                    f32 actual_content_size = 0.0f;
+                    for (Box *child = box->first; child; child = child->next) {
+                        actual_content_size += child->fixed_size[axis];
+                    }
+                    layout_position = (box->fixed_size[axis] - actual_content_size) * 0.5f;
+                    break;
                 }
-                layout_position = (root->fixed_size[axis] - actual_content_size) * 0.5f;
-                break;
-            }
-            case Alignment_End: {
-                layout_position = root->fixed_size[axis];
-                if (root->last) layout_position -= root->last->fixed_size[axis];
-                break;
-            }
-        }
-    }
-
-    for (Box *child = root->first; child; child = child->next) {
-        if (!(child->flags & (BoxFlag_FloatingX<<axis))) {
-            if (root->child_layout_axis == axis) {
-                child->fixed_position[axis] = layout_position;
-
-                switch (root->child_alignment[axis]) {
-                    case Alignment_Start:
-                    case Alignment_Center:
-                        layout_position += child->fixed_size[axis];
-                        break;
-                    case Alignment_End:
-                        layout_position -= child->fixed_size[axis];
-                        break;
-                }
-            } else {
-                switch (root->child_alignment[axis]) {
-                    case Alignment_Start:
-                        layout_position = 0.0f;
-                        break;
-                    case Alignment_Center:
-                        layout_position = (root->fixed_size[axis] - child->fixed_size[axis]) * 0.5f;
-                        break;
-                    case Alignment_End:
-                        layout_position = root->fixed_size[axis] - child->fixed_size[axis];
-                        break;
+                case Alignment_End: {
+                    f32 actual_content_size = 0.0f;
+                    for (Box *child = box->first; child; child = child->next) {
+                        actual_content_size += child->fixed_size[axis];
+                    }
+                    layout_position = box->fixed_size[axis] - actual_content_size;
+                    break;
                 }
 
-                child->fixed_position[axis] = layout_position;
+                // case Alignment_SpaceBetween: {
+                //     f32 children_sum = 0.0f;
+                //     for (Box *child = box->first; child; child = child->next) {
+                //         children_sum += child->fixed_size[axis];
+                //     }
+                //     gap = (box->fixed_size[axis] - children_sum) / cu_clamp_bot(1, box->child_count);
+                //     break;
+                // }
             }
         }
 
-        child->rect.tl[axis] = root->rect.tl[axis] + child->fixed_position[axis];
-        child->rect.br[axis] = child->rect.tl[axis] + child->fixed_size[axis];
-    }
+        for (Box *child = box->first; child; child = child->next) {
+            if (!(child->flags & (BoxFlag_FloatingX<<axis))) {
+                if (box->child_layout_axis == axis) {
+                    child->fixed_position[axis] = layout_position;
 
-    for (Box *child = root->first; child; child = child->next) {
-        layout_place_boxes(child, axis);
+                    switch (box->child_alignment[axis]) {
+                        case Alignment_Start:
+                        case Alignment_Center:
+                            layout_position += child->fixed_size[axis];
+                            break;
+                        case Alignment_End:
+                            layout_position += child->fixed_size[axis];
+                            break;
+                        // case Alignment_SpaceBetween:
+                        //     layout_position += child->fixed_size[axis] + gap;
+                        //     break;
+                    }
+                } else {
+                    switch (box->child_alignment[axis]) {
+                        case Alignment_Start:
+                            layout_position = 0.0f;
+                            break;
+                        case Alignment_Center:
+                            layout_position = (box->fixed_size[axis] - child->fixed_size[axis]) * 0.5f;
+                            break;
+                        case Alignment_End:
+                            layout_position = box->fixed_size[axis] - child->fixed_size[axis];
+                            break;
+                    }
+
+                    child->fixed_position[axis] = layout_position;
+                }
+            }
+
+            child->rect.tl[axis] = box->rect.tl[axis] + child->fixed_position[axis];
+            child->rect.br[axis] = child->rect.tl[axis] + child->fixed_size[axis];
+        }
     }
 }
 
@@ -457,6 +553,7 @@ void apply_layout() {
         layout_calc_fixed_sizes(root, axis);
         layout_calc_upwards_dependent_sizes(root, axis);
         layout_calc_downwards_dependent_sizes(root, axis);
+        layout_enforce_constraints(root, axis);
         layout_place_boxes(root, axis);
     }
 
@@ -502,11 +599,11 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
         };
         ui_draw_data->fallback_texture = texture_create(white_bitmap, 2, 2, TextureFormat::R8_UNorm);
 
-        default_font = font_create(STRZ("fonts/seguisb.ttf"), 40);
+        default_font = font_create(STRZ("fonts/seguisb.ttf"), 20);
 
-        u32 icon_font_glyphs[] = { 87, 120, 33, 49, 85, 68, 76, 82, 57, 48, 55, 56, 123, 125, 67, 70, 35 };
+        u32 icon_font_glyphs[] = { 0, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90 };
 
-        icon_font = font_create(STRZ("fonts/icons.ttf"), 24, icon_font_glyphs, cu_count_of(icon_font_glyphs));
+        icon_font = font_create(STRZ("fonts/icons.ttf"), 20, icon_font_glyphs, cu_count_of(icon_font_glyphs));
 
 
         ui_state->mx_last_frame = ui_state->my_last_frame = ui_state->mx = ui_state->my = -1;
@@ -518,16 +615,21 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
         ui_state->text_alignment_stack.default_value = Alignment_Start;
     }
 
+    ui_state->frame_delta = frame_delta;
+
     ui_state->events = events;
 
-    Box *focus_active_box = find_box(ui_state->active_box_key);
+    // Box *focus_active_box = find_box(ui_state->active_box_key);
 
     for (os::Event *event : events) {
+        MouseButtonKind mouse_kind = (MouseButtonKind)0;
+        if (event->key == Keycode::MouseLeft) mouse_kind = MouseButtonKind_Left;
+        else if (event->key == Keycode::MouseMiddle) mouse_kind = MouseButtonKind_Middle;
+        else if (event->key == Keycode::MouseRight) mouse_kind = MouseButtonKind_Right;
+
         switch (event->type) {
             case os::Event::MouseRelease:
-                if (focus_active_box) {
-                    set_active_box_key(0);
-                }
+                ui_state->active_box_key[mouse_kind] = 0;
                 break;
 
             case os::Event::MouseMove:
@@ -536,8 +638,8 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
                 ui_state->mx = event->mx;
                 ui_state->my = event->my;
                 break;
+
             case os::Event::MouseLeave:
-                printf("MOSUE LEAVE\n");
                 ui_state->mx_last_frame = ui_state->my_last_frame = ui_state->mx = ui_state->my = -1;
                 break;
         }
@@ -547,16 +649,26 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
         ui_state->mx_last_frame = ui_state->my_last_frame = ui_state->mx = ui_state->my = -1;
     }
 
+    if (os::main_window->is_minimized) {
+        ui_state->hot_box_key = 0;
+        ui_state->active_box_key[MouseButtonKind_Left] = 0;
+        ui_state->active_box_key[MouseButtonKind_Middle] = 0;
+        ui_state->active_box_key[MouseButtonKind_Right] = 0;
+    }
+
     ui_state->depth_counter = 0;
 
     push_layout_axis(Axis_Y);
     push_font(default_font);
-    push_font_size(24);
-    push_pref_width(pref_size_px(100.0f));
-    push_pref_height(pref_size_px(100.0f));
+    push_font_size(14);
+    push_pref_width(pixel_size(100.f, 1.f));
+    push_pref_height(pixel_size(100.f, 1.f));
     push_background_color(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    push_border_color(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     push_text_color(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
     push_hot_color(Vector4(0.0f, 0.47f, 0.65f, 1.0f));
+    push_hot_color(Vector4(0.0f, 0.47f, 0.65f, 1.0f));
+    push_active_color(Vector4(0.93f, 0.14f, 0.59f, 1.0f));
 
     set_next_fixed_width(render_dimension.x);
     set_next_fixed_height(render_dimension.y);
@@ -571,20 +683,37 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
 void end_frame() {
     Box *root = ui_state->root;
 
+    os::main_window->current_cursor = os::Cursor_Arrow;
+
     Box *hot_box = find_box(ui_state->hot_box_key);
     if (hot_box) {
         if (!mouse_in_rect(hot_box->rect)) {
-            set_hot_box_key(0);
+            ui_state->hot_box_key = 0;
         }
+
+        os::main_window->current_cursor = hot_box->hover_cursor;
     }
 
-    Box *focus_active_box = find_box(ui_state->active_box_key);
+    f32 dt = ui_state->frame_delta;
+
+    f32 hot_rate = 24.0f * dt;
+    f32 active_rate = 24.0f * dt;
+
+    for (auto it : ui_state->persistent_map) {
+        Box *box = it.second;
+        bool is_hot = key_match(ui_state->hot_box_key, box->key);
+        bool is_active = key_match(ui_state->active_box_key[MouseButtonKind_Left], box->key);
+
+        box->hot_t += hot_rate * ((f32)is_hot - box->hot_t);
+        box->active_t += active_rate * ((f32)is_active - box->active_t);
+    }
 
     apply_layout();
 
     draw_layout();
 
-    clear_params();
+
+    UI_CLEAR_STACKS;
 
     ui_state->build_index++;
 }
@@ -656,7 +785,9 @@ void draw_rect(Rect dst, Rect src, Vector4 color) {
 }
 
 void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 size) {
-    f32 scale = size / font->line_skip;
+    f32 dpi = os::main_window->dpi;
+    // f32 line_height = size * (dpi / 72.f);
+    f32 scale = size / font->size;
     draw_set_texture(font->texture);
 
     Vector2 cursor = position;
@@ -719,34 +850,6 @@ Vector2 get_box_text_position(Box *box) {
     return pos;
 }
 
-void draw_box(Box *box) {
-    DrawData *draw_data = ui_draw_data;
-
-    draw_set_texture(box->font->texture);
-
-    if (box->draw_proc) {
-        box->draw_proc(box, box->draw_data);
-        return;
-    }
-
-    if (box->flags & BoxFlag_DrawBackground) {
-        Vector4 background_color = box->background_color;
-        if (is_hot_box_key(box->key)) {
-            background_color = box->hot_color;
-        }
-        draw_rect(box->rect, background_color);
-    }
-
-    for (Box *child = box->first; child; child = child->next) {
-        draw_box(child);
-    }
-
-
-    if (box->flags & BoxFlag_DrawText) {
-        Vector2 text_position = get_box_text_position(box);
-        draw_text(box->text, text_position, box->font, box->text_color, box->font_size);
-    }
-}
 
 void draw_layout() {
     DrawData *draw_data = ui_draw_data;
@@ -754,8 +857,74 @@ void draw_layout() {
     draw_data->batches.release();
     set_current_draw_batch(nullptr);
 
-    for (Box *box = ui_state->root->first; box; box = box->next) {
-        draw_box(box);
+    Box *root = ui_state->root;
+
+    for (Box *box = root; box; box = box_rec_pre(box, root).next) {
+        DrawData *draw_data = ui_draw_data;
+
+        if (box->draw_proc) {
+            box->draw_proc(box, box->draw_data);
+        } else {
+            draw_set_texture(box->font->texture);
+
+            if (box->flags & BoxFlag_DrawBackground) {
+                Vector4 background_color = box->background_color;
+                bool mouse_active = false;
+
+                if (box->flags & BoxFlag_DrawHotEffects && key_match(ui_state->hot_box_key, box->key)) {
+                    background_color = box->hot_color * box->hot_t;
+                }
+
+                if (box->flags & BoxFlag_DrawActiveEffects) {
+                    cu_foreach_enum_val(MouseButtonKind, mouse_kind) {
+                        Key active_key = ui_state->active_box_key[mouse_kind];
+                        if (key_match(active_key, box->key)) {
+                            background_color = box->active_color * box->active_t;
+                            break;
+                        }
+                    }
+                }
+
+                draw_rect(box->rect, background_color);
+            }
+
+            if (box->flags & BoxFlag_DrawBorder) {
+                Rect border_rect = box->rect;
+                box->rect.x0 -= 1.0f;
+                box->rect.y0 -= 1.0f;
+                box->rect.x1 += 1.0f;
+                box->rect.y1 += 1.0f;
+
+                draw_rect(box->rect, box->border_color);
+            }
+
+            if (box->flags & (BoxFlag_DrawTop|BoxFlag_DrawBottom|BoxFlag_DrawLeft|BoxFlag_DrawRight)) {
+                Vector4 border_color = box->border_color;
+                f32 half_thickness = 0.5f;
+                Rect r = box->rect;
+
+                if (box->flags & BoxFlag_DrawTop) {
+                    draw_rect(Rect(r.x0, r.y0, r.x1, r.y0 + 2*half_thickness), border_color);
+                }
+
+                if (box->flags & BoxFlag_DrawBottom) {
+                    draw_rect(Rect(r.x0, r.y1 - 2*half_thickness, r.x1, r.y1), border_color);
+                }
+
+                if (box->flags & BoxFlag_DrawLeft) {
+                    draw_rect(Rect(r.x0, r.y0, r.x0 + 2*half_thickness, r.y1), border_color);
+                }
+
+                if (box->flags & BoxFlag_DrawRight) {
+                    draw_rect(Rect(r.x1 - 2*half_thickness, r.y0, r.x1, r.y1), border_color);
+                }
+            }
+
+            if (box->flags & BoxFlag_DrawText) {
+                Vector2 text_position = get_box_text_position(box);
+                draw_text(box->text, text_position, box->font, box->text_color, box->font_size);
+            }
+        }
     }
 }
 
@@ -778,26 +947,33 @@ Signal signal_from_box(Box *box) {
         }
     }
 
-    if (hover && !is_hot_box_key(box->key)) {
-        set_hot_box_key(box->key);
-        ui_state->hot_t = 0;
+    if (hover && !key_match(ui_state->hot_box_key, box->key)) {
+        ui_state->hot_box_key = box->key;
+        box->hot_t = 0;
     }
 
     bool clicked = false;
     bool pressed = false;
     for (int i = 0; i < ui_state->events.count; i++) {
         os::Event *evt = ui_state->events[i];
+
+        MouseButtonKind mouse_kind = (MouseButtonKind)0;
+        if (evt->key == Keycode::MouseLeft) mouse_kind = MouseButtonKind_Left;
+        else if (evt->key == Keycode::MouseMiddle) mouse_kind = MouseButtonKind_Middle;
+        else if (evt->key == Keycode::MouseRight) mouse_kind = MouseButtonKind_Right;
+
         switch (evt->type) {
-            case os::Event::MousePress:
-                if ((box->flags & BoxFlag_MouseInput) && hover) {
-                    set_active_box_key(box->key);
-                    ui_state->active_t = 0;
+            case os::Event::MousePress: {
+                if (box->flags & BoxFlag_MouseInput && hover) {
+                    ui_state->active_box_key[mouse_kind] = box->key;
+                    box->active_t = 0;
                     clicked = true;
                 }
                 break;
+            }
 
             case os::Event::MouseMove:
-                if ((box->flags & BoxFlag_MouseInput) && is_active_box_key(box->key)) {
+                if (box->flags & BoxFlag_MouseInput && key_match(ui_state->active_box_key[mouse_kind], box->key)) {
                     signal.dragging = true;
                 }
                 break;
@@ -809,6 +985,7 @@ Signal signal_from_box(Box *box) {
     signal.pressed = pressed;
     return signal;
 }
+
 
 
 };

@@ -9,6 +9,7 @@ struct ScrollPt {
     f32 off;
 };
 
+Signal spacer(PrefSize size);
 Box *label(String string);
 
 Signal button(String name);

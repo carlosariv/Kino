@@ -11,49 +11,76 @@
 
 struct ID3D11Buffer;
 
+#define UI_PARAM_LIST(X) \
+X(BoxFlags, flags) \
+X(Box*, parent) \
+X(f32, fixed_x) \
+X(f32, fixed_y) \
+X(f32, fixed_width) \
+X(f32, fixed_height) \
+X(Font*, font) \
+X(f32, font_size) \
+X(Alignment, child_alignment_x) \
+X(Alignment, child_alignment_y) \
+X(Alignment, text_alignment) \
+X(Axis, layout_axis) \
+X(PrefSize, pref_width) \
+X(PrefSize, pref_height) \
+X(Vector4, background_color) \
+X(Vector4, border_color) \
+X(Vector4, text_color) \
+X(Vector4, hot_color) \
+X(Vector4, active_color) \
+X(os::Cursor, hover_cursor) \
+
+
+#define UI_PARAM_DECLARE(Type,Name) Param<Type> Name##_stack;
+#define UI_PARAM_DECLS UI_PARAM_LIST(UI_PARAM_DECLARE)
+
+#define UI_PARAM_TOP(Type,Name) inline Type top_ ## Name() { return ui_state->Name ## _stack.top(); }
+#define UI_PARAM_TOP_DECLS UI_PARAM_LIST(UI_PARAM_TOP)
+
+#define UI_PARAM_PUSH(Type,Name) inline void push_ ## Name(Type v) { ui_state->Name ## _stack.push(v); }
+#define UI_PARAM_PUSH_DECLS UI_PARAM_LIST(UI_PARAM_PUSH)
+
+#define UI_PARAM_SET_NEXT(Type,Name) inline void set_next_ ## Name(Type v) { ui_state->Name ## _stack.set_next(v); }
+#define UI_PARAM_SET_NEXT_DECLS UI_PARAM_LIST(UI_PARAM_SET_NEXT)
+
+#define UI_PARAM_POP(Type,Name) inline void pop_ ## Name() { ui_state->Name ## _stack.pop(); }
+#define UI_PARAM_POP_DECLS UI_PARAM_LIST(UI_PARAM_POP)
+
 namespace ui {
 
 struct Box;
 typedef u64 Key;
 
-union Rect {
-    struct {
-        f32 left;
-        f32 top;
-        f32 right;
-        f32 bottom;
-    };
-
-    struct {
-        Vector2 tl;
-        Vector2 br;
-    };
-
-    Vector2 elems[2];
-
-    Rect() { }
-    Rect(f32 l, f32 t, f32 r, f32 b) : left(l), top(t), right(r), bottom(b) {}
-};
-
 enum IconKind {
-    ICON_WARNING,
-    ICON_CANCEL,
-    ICON_CHECK_EMPTY,
-    ICON_CHECK,
-    ICON_ARROW_UP,
-    ICON_ARROW_DOWN,
-    ICON_ARROW_LEFT,
-    ICON_ARROW_RIGHT,
-    ICON_TRIANGLE_UP,
-    ICON_TRIANGLE_DOWN,
-    ICON_TRIANGLE_LEFT,
-    ICON_TRIANGLE_RIGHT,
-    ICON_ZOOM_PLUS,
-    ICON_ZOOM_MINUS,
-    ICON_FOLDER,
-    ICON_DOCUMENT,
-    ICON_TRASH,
-    ICON_COUNT
+    IconKind_Null,
+    IconKind_Home,
+    IconKind_Info,
+
+    IconKind_LeftArrow,
+    IconKind_RightArrow,
+    IconKind_UpArrow,
+    IconKind_DownArrow,
+
+    IconKind_Folder,
+    IconKind_FolderOpen,
+    IconKind_Document,
+
+    IconKind_Find,
+    IconKind_Check,
+    IconKind_Warning,
+    IconKind_Cancel,
+    IconKind_Trash,
+    IconKind_ZoomPlus,
+    IconKind_ZoomMinus,
+
+    IconKind_WindowRestore,
+    IconKind_WindowMaximize,
+    IconKind_WindowMinimize,
+
+    IconKind_COUNT
 };
 
 enum PrefSizeKind {
@@ -67,6 +94,7 @@ enum PrefSizeKind {
 struct PrefSize {
     PrefSizeKind kind;
     f32 value;
+    f32 strictness;
 };
 
 enum BoxFlags {
@@ -83,7 +111,13 @@ enum BoxFlags {
 
     BoxFlag_DrawBackground = (1<<15),
     BoxFlag_DrawText = (1<<16),
-    BoxFlag_DrawBorder = (1<<17),
+    BoxFlag_DrawHotEffects = (1<<18),
+    BoxFlag_DrawActiveEffects = (1<<19),
+    BoxFlag_DrawBorder = (1<<20),
+    BoxFlag_DrawTop = (1<<21),
+    BoxFlag_DrawBottom = (1<<22),
+    BoxFlag_DrawLeft = (1<<23),
+    BoxFlag_DrawRight = (1<<24),
 
     BoxFlag_Floating  = (BoxFlag_FloatingX|BoxFlag_FloatingY),
     BoxFlag_FixedSize = (BoxFlag_FixedWidth|BoxFlag_FixedHeight),
@@ -97,8 +131,15 @@ typedef ui_draw_proc_t* DrawProc;
 enum Alignment {
     Alignment_Start,
     Alignment_Center,
-    Alignment_End
+    Alignment_End,
+    // Alignment_SpaceBetween,
 };
+
+// enum TextAlignment {
+//     TextAlign_Start,
+//     TextAlign_Center,
+//     TextAlign_End,
+// };
 
 struct Box {
     Box *parent;
@@ -106,6 +147,7 @@ struct Box {
     Box *prev;
     Box *first;
     Box *last;
+    int child_count;
 
     Key key;
     int layer;
@@ -117,9 +159,12 @@ struct Box {
     Alignment text_alignment;
     Vector4 text_color;
     Vector4 background_color;
+    Vector4 border_color;
     Vector4 hot_color;
+    Vector4 active_color;
     Font *font;
     f32 font_size;
+    os::Cursor hover_cursor;
 
     void *draw_data;
     DrawProc draw_proc;
@@ -129,6 +174,9 @@ struct Box {
     Rect rect;
     String text;
     u32 depth;
+
+    f32 hot_t = 0;
+    f32 active_t = 0;
 
     Box() {}
 };
@@ -209,6 +257,13 @@ struct Signal {
     bool dragging;
 };
 
+enum MouseButtonKind {
+    MouseButtonKind_Left,
+    MouseButtonKind_Middle,
+    MouseButtonKind_Right,
+    MouseButtonKind_COUNT
+};
+
 struct UIState {
     Arena *arena;
     Allocator allocator;
@@ -221,140 +276,55 @@ struct UIState {
     int mx_last_frame = 0;
     int my_last_frame = 0;
 
+    f32 frame_delta = 0;
+
     Array<os::Event*> events;
 
     std::unordered_map<Key,Box*> persistent_map;
     Box *root = nullptr;
 
-    Key active_box_key = 0;
     Key hot_box_key = 0;
-    f32 hot_t = 0;
-    f32 active_t = 0;
+    Key active_box_key[MouseButtonKind_COUNT] = {};
 
     Array<Rect> blacklist_rects;
     u32 depth_counter = 0;
 
-    // Stack Parameters
-    Param<Box*> parent_stack;
-    Param<f32> fixed_x_stack;
-    Param<f32> fixed_y_stack;
-    Param<f32> fixed_width_stack;
-    Param<f32> fixed_height_stack;
-    Param<Font*> font_stack;
-    Param<f32> font_size_stack;
-    Param<Alignment> child_alignment_x_stack;
-    Param<Alignment> child_alignment_y_stack;
-    Param<Alignment> text_alignment_stack;
-    Param<Axis> layout_axis_stack;
-    Param<PrefSize> pref_width_stack;
-    Param<PrefSize> pref_height_stack;
-    Param<Vector4> background_color_stack;
-    Param<Vector4> text_color_stack;
-    Param<Vector4> hot_color_stack;
+    UI_PARAM_DECLS;
 };
 
 extern UIState *ui_state;
 extern DrawData *ui_draw_data;
 extern Font *icon_font;
 
-inline PrefSize pref_size_px(f32 px) {
-    PrefSize size;
-    size.kind = PrefSizeKind_Pixels;
-    size.value = px;
-    return size;
+//- NOTE: UI state parameter function declarations.
+UI_PARAM_TOP_DECLS;
+UI_PARAM_PUSH_DECLS;
+UI_PARAM_SET_NEXT_DECLS;
+UI_PARAM_POP_DECLS;
+
+
+inline PrefSize pixel_size(f32 value, f32 strictness) {
+    return { PrefSizeKind_Pixels, value, strictness };
 }
 
-inline PrefSize pref_size_parent(f32 pct) {
-    PrefSize size;
-    size.kind = PrefSizeKind_ParentPct;
-    size.value = pct;
-    return size;
+inline PrefSize text_em_size(f32 value, f32 strictness) {
+    return { PrefSizeKind_Pixels, top_font_size() * value, strictness };
 }
 
-inline PrefSize pref_size_sum() {
-    PrefSize size;
-    size.kind = PrefSizeKind_ChildrenSum;
-    return size;
+inline PrefSize text_size(f32 padding, f32 strictness) {
+    return { PrefSizeKind_TextContent, padding, strictness };
 }
 
-inline PrefSize pref_size_text(f32 padding) {
-    PrefSize size;
-    size.kind = PrefSizeKind_TextContent;
-    size.value = padding;
-    return size;
+inline PrefSize children_sum_size(f32 strictness) {
+    return { PrefSizeKind_ChildrenSum, 0.f, strictness };
 }
 
-inline Box *top_parent() { return ui_state->parent_stack.top(); }
-inline f32 top_fixed_x() { return ui_state->fixed_x_stack.top(); }
-inline f32 top_fixed_y() { return ui_state->fixed_y_stack.top(); }
-inline f32 top_fixed_width() { return ui_state->fixed_width_stack.top(); }
-inline f32 top_fixed_height() { return ui_state->fixed_height_stack.top(); }
-inline Font *top_font() { return ui_state->font_stack.top(); }
-inline f32 top_font_size() { return ui_state->font_size_stack.top(); }
-inline Axis top_layout_axis() { return ui_state->layout_axis_stack.top(); }
-inline Alignment top_child_alignment_x() { return ui_state->child_alignment_x_stack.top(); }
-inline Alignment top_child_alignment_y() { return ui_state->child_alignment_y_stack.top(); }
-inline Alignment top_text_alignment() { return ui_state->text_alignment_stack.top(); }
-inline PrefSize top_pref_width() { return ui_state->pref_width_stack.top(); }
-inline PrefSize top_pref_height() { return ui_state->pref_height_stack.top(); }
-inline Vector4 top_background_color() { return ui_state->background_color_stack.top(); }
-inline Vector4 top_text_color() { return ui_state->text_color_stack.top(); }
-inline Vector4 top_hot_color() { return ui_state->hot_color_stack.top(); }
+inline PrefSize pct_size(f32 value, f32 strictness) {
+    return { PrefSizeKind_ParentPct, value, strictness };
+}
 
-inline void push_parent(Box *v) { ui_state->parent_stack.push(v); }
-inline void push_fixed_x(f32 v) { ui_state->fixed_x_stack.push(v); }
-inline void push_fixed_y(f32 v) { ui_state->fixed_y_stack.push(v); }
-inline void push_fixed_width(f32 v) { ui_state->fixed_width_stack.push(v); }
-inline void push_fixed_height(f32 v) { ui_state->fixed_height_stack.push(v); }
-inline void push_fixed_size(Axis axis, f32 v) { if (axis==Axis_X) ui_state->fixed_width_stack.push(v); else ui_state->fixed_height_stack.push(v); }
-inline void push_font(Font *v) { ui_state->font_stack.push(v); }
-inline void push_font_size(f32 v) { ui_state->font_size_stack.push(v); }
-inline void push_layout_axis(Axis v) { ui_state->layout_axis_stack.push(v); }
-inline void push_child_alignment_x(Alignment v) { ui_state->child_alignment_x_stack.push(v); }
-inline void push_child_alignment_y(Alignment v) { ui_state->child_alignment_y_stack.push(v); }
-inline void push_text_alignment(Alignment v) { ui_state->text_alignment_stack.push(v); }
-inline void push_pref_width(PrefSize v) { ui_state->pref_width_stack.push(v); }
-inline void push_pref_height(PrefSize v) { ui_state->pref_height_stack.push(v); }
-inline void push_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) ui_state->pref_width_stack.push(v); else ui_state->pref_height_stack.push(v); }
-inline void push_background_color(Vector4 v) { ui_state->background_color_stack.push(v); }
-inline void push_text_color(Vector4 v) { ui_state->text_color_stack.push(v); }
-inline void push_hot_color(Vector4 v) { ui_state->hot_color_stack.push(v); }
-
-inline void set_next_parent(Box *v) { ui_state->parent_stack.set_next(v); }
-inline void set_next_fixed_x(f32 v) { ui_state->fixed_x_stack.set_next(v); }
-inline void set_next_fixed_y(f32 v) { ui_state->fixed_y_stack.set_next(v); }
-inline void set_next_fixed_width(f32 v) { ui_state->fixed_width_stack.set_next(v); }
-inline void set_next_fixed_height(f32 v) { ui_state->fixed_height_stack.set_next(v); }
-inline void set_next_fixed_size(Axis axis, f32 v) { if (axis==Axis_X) ui_state->fixed_width_stack.set_next(v); else ui_state->fixed_height_stack.set_next(v); }
-inline void set_next_font(Font *v) { ui_state->font_stack.set_next(v); }
-inline void set_next_font_size(f32 v) { ui_state->font_size_stack.set_next(v); }
-inline void set_next_child_alignment_x(Alignment v) { ui_state->child_alignment_x_stack.set_next(v); }
-inline void set_next_child_alignment_y(Alignment v) { ui_state->child_alignment_y_stack.set_next(v); }
-inline void set_next_text_alignment(Alignment v) { ui_state->text_alignment_stack.set_next(v); }
-inline void set_next_layout_axis(Axis v) { ui_state->layout_axis_stack.set_next(v); }
-inline void set_next_pref_width(PrefSize v) { ui_state->pref_width_stack.set_next(v); }
-inline void set_next_pref_height(PrefSize v) { ui_state->pref_height_stack.set_next(v); }
-inline void set_next_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) ui_state->pref_width_stack.set_next(v); else ui_state->pref_height_stack.set_next(v); }
-inline void set_next_background_color(Vector4 v) { ui_state->background_color_stack.set_next(v); }
-inline void set_next_text_color(Vector4 v) { ui_state->text_color_stack.set_next(v); }
-inline void set_next_hot_color(Vector4 v) { ui_state->hot_color_stack.set_next(v); }
-
-inline void pop_parent() { ui_state->parent_stack.pop(); }
-inline void pop_fixed_x() { ui_state->fixed_x_stack.pop(); }
-inline void pop_fixed_y() { ui_state->fixed_y_stack.pop(); }
-inline void pop_fixed_width() { ui_state->fixed_width_stack.pop(); }
-inline void pop_fixed_height() { ui_state->fixed_height_stack.pop(); }
-inline void pop_font() { ui_state->font_stack.pop(); }
-inline void pop_font_size() { ui_state->font_size_stack.pop(); }
-inline void pop_child_alignment_x() { ui_state->child_alignment_x_stack.pop(); }
-inline void pop_child_alignment_y() { ui_state->child_alignment_y_stack.pop(); }
-inline void pop_text_alignment() { ui_state->text_alignment_stack.pop(); }
-inline void pop_layout_axis() { ui_state->layout_axis_stack.pop(); }
-inline void pop_pref_width() { ui_state->pref_width_stack.pop(); }
-inline void pop_pref_height() { ui_state->pref_height_stack.pop(); }
-inline void pop_background_color() { ui_state->background_color_stack.pop(); }
-inline void pop_text_color() { ui_state->text_color_stack.pop(); }
-inline void pop_hot_color() { ui_state->hot_color_stack.pop(); }
+inline void push_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) push_pref_width(v); else push_pref_height(v); }
+inline void set_next_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) set_next_pref_width(v); else set_next_pref_height(v); }
 
 Box *box_create(BoxFlags flags, Key key);
 Box *box_create(BoxFlags flags, String string);
@@ -373,7 +343,6 @@ void draw_text(String text, Vector2 position, Font *font, Vector4 color, f32 siz
 void draw_box(Box *box);
 void draw_layout();
 
-bool is_hot_box_key(Key key);
 
 Vector2 get_box_text_position(Box *box);
 
@@ -385,6 +354,10 @@ String string_from_icon_kind(IconKind kind, const char *end);
 
 
 Vector2 get_rect_size(Rect rect);
+
+Key key_zero();
+bool key_match(Key a, Key b);
+
 
 };
 
