@@ -21,6 +21,9 @@ typedef u64 WallClock;
 extern Array<Event*> window_events;
 extern Window *main_window;
 
+
+String current_path();
+
 void set_window_minimized();
 void set_window_maximized();
 void set_window_close();
@@ -79,6 +82,7 @@ struct Event {
 };
 
 enum FileAttribs {
+    FileAttrib_Default = 0,
     FileAttrib_Normal    = (1<<0),
     FileAttrib_ReadOnly  = (1<<1),
     FileAttrib_Directory = (1<<2),
@@ -87,10 +91,12 @@ enum FileAttribs {
     FileAttrib_Archive   = (1<<5),
     FileAttrib_Device    = (1<<6),
 };
+ENUM_FLAG_OPERATORS(FileAttribs);
 
 struct File {
     Handle handle;
     String file_name;
+    FileAttribs attributes = FileAttrib_Default;
     u64 file_size;
     u64 create_time;
     u64 access_time;

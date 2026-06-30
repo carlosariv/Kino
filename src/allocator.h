@@ -42,7 +42,9 @@ struct Arena {
 extern Allocator g_heap_allocator;
 inline static constexpr size_t DEFAULT_ARENA_SIZE = cu_kilobytes(64);
 
+Allocator heap_allocator();
 Allocator arena_allocator(Arena *arena);
+
 Arena *make_arena(u64 size = DEFAULT_ARENA_SIZE);
 void *arena_push(Arena *arena, u64 size);
 void arena_release(Arena *arena);

@@ -20,6 +20,14 @@ Array<Event*> window_events;
 LARGE_INTEGER query_performance_frequency;
 Array<Rect> title_bar_rects;
 
+String current_path() {
+    DWORD len = GetCurrentDirectory(0, NULL);
+    u8 *buffer = NewArray(u8, heap_allocator(), len+1);
+    len = GetCurrentDirectory(len+1, (LPSTR)buffer);
+    String result = {buffer, len};
+    return result;
+}
+
 void set_window_minimized() {
     ShowWindow((HWND)main_window->handle, SW_MINIMIZE);
 }
@@ -646,6 +654,26 @@ Array<File> list_directory_files(String path) {
             file.create_time = ((u64)file_data.ftCreationTime.dwHighDateTime << 32) + file_data.ftCreationTime.dwLowDateTime;
             file.access_time = ((u64)file_data.ftLastAccessTime.dwHighDateTime << 32) + file_data.ftLastAccessTime.dwLowDateTime;
             file.write_time = ((u64)file_data.ftLastWriteTime.dwHighDateTime << 32) + file_data.ftLastWriteTime.dwLowDateTime;
+
+            file.attributes = FileAttrib_Default;
+            if (file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                file.attributes |= FileAttrib_Directory;
+            }
+            if (file_data.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) {
+                file.attributes |= FileAttrib_Hidden;
+            }
+            if (file_data.dwFileAttributes & FILE_ATTRIBUTE_READONLY) {
+                file.attributes |= FileAttrib_ReadOnly;
+            }
+            if (file_data.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) {
+                file.attributes |= FileAttrib_Normal;
+            }
+
+            if (file.attributes == FileAttrib_Default) {
+                file.attributes |= FileAttrib_Normal;
+
+            }
+
             files.add(file);
         } while (FindNextFileA(find_handle, &file_data));
 

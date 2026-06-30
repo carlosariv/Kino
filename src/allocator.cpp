@@ -11,6 +11,8 @@
 
 Allocator g_heap_allocator = { heap_allocator_proc, nullptr };
 
+Allocator heap_allocator() { return g_heap_allocator; }
+
 static constexpr size_t alignment = alignof(std::max_align_t);
 
 void *cu_allocate(Allocator a, isize size) {
