@@ -14,9 +14,19 @@ struct Buffer;
 struct ViewManager;
 struct BufferManager;
 
+enum FileTreeGroupKind {
+    FileTreeGroupKind_Name,
+    FileTreeGroupKind_Size,
+    FileTreeGroupKind_Type,
+    FileTreeGroupKind_DateModified,
+    FileTreeGroupKind_COUNT
+};
+
 struct FileSystem {
+    bool active = false;
     String path;
     Array<os::File> files;
+    Array<FileTreeGroupKind> groups;
 };
 
 struct State {
