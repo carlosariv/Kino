@@ -42,20 +42,26 @@ UI_DRAW_PROC(line_edit_draw) {
 
     String text = make_string_view(ed->txt, ed->len);
 
-    draw_rect(box->rect, box->background_color);
-
     Vector2 text_position = get_box_text_position(box);
     f32 max_x = box->rect.x1 - text_position.x;
+
+    f32 scale = box->font_size / box->font->size;
+    f32 padding = scale * box->font->max_advance;
+
     Vector2 text_size = measure_text_size(text, box->font, box->font_size);
+    f32 cursor_text_width = measure_text_size(substring(text, 0, ed->pos), box->font, box->font_size).x;
+    f32 box_width = box->rect.x1 - box->rect.x0 - padding;
+    f32 overflow = cursor_text_width - box_width;
+    overflow = cu_clamp_bot(0, overflow);
+    text_position.x -= overflow;
 
+    draw_text(text, box->rect, text_position, box->font, box->text_color, box->font_size, max_x, text_size, DrawTextFlag_Default);
 
-    draw_text(text, box->rect, box->rect.tl, box->font, box->text_color, box->font_size, max_x, text_size);
-    Vector2 cursor = box->rect.tl;
-    f32 scale = box->font_size / box->font->line_skip;
+    Vector2 cursor = text_position;
     for (int i = 0; i < ed->pos; i++) {
         u32 code = (u32)text.text[i];
         GlyphMetrics *g = font_get_glyph_metrics(box->font, code);
-        cursor.x += g->advance * box->font->scale * scale;
+        cursor.x += g->advance * scale;
     }
     Rect cursor_rect;
     cursor_rect.tl = cursor;
@@ -95,14 +101,15 @@ void line_edit_text_op(u8 **buffer_out, int *pos, int *len, int *capacity, Strin
 
 void line_edit(u8 **buffer, int *pos, int *len, int *capacity, String string) {
     set_next_hover_cursor(os::Cursor_IBeam);
-    Box *box = box_create(BoxFlag_MouseClickable|BoxFlag_KeyboardClickable|BoxFlag_DrawBackground|BoxFlag_DrawText, string);
+    Box *box = box_create(BoxFlag_MouseClickable|BoxFlag_ClickToFocus|BoxFlag_KeyboardClickable|BoxFlag_DrawBackground|BoxFlag_Clip, string);
+    box->focus_color = Vector4(0.3f, 0.34f, 0.47f, 1.f);
 
     box->text = make_string_view(*buffer, *len);
 
     Signal sig = signal_from_box(box);
 
-    if (key_match(ui_state->hot_box_key, box->key)) {
-        for (os::Event *evt  : os::window_events) {
+    if (key_match(ui_state->focus_box_key, box->key)) {
+        for (os::Event *evt : ui_state->events) {
             switch (evt->type) {
                 case os::Event::KeyPress:
                     if (evt->key == Keycode::Left||evt->key == Keycode::Right) {

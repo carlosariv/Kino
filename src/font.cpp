@@ -192,6 +192,10 @@ Font *font_create(String file_name, int size, u32 *code_points, int code_point_c
         metrics.advance = advance_width * font->scale;
         metrics.lsb = left_side_bearing * font->scale;
 
+        if (metrics.advance > font->max_advance) {
+            font->max_advance = metrics.advance;
+        }
+
         int byte_offset = x + (y * bitmap_width * bytes_per_pixel);
         stbtt_MakeCodepointBitmap(&info, bitmap + byte_offset, width, height, bitmap_width * bytes_per_pixel, scale, scale, code_point);
 

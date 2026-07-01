@@ -32,6 +32,7 @@ struct Font {
     int line_gap;
     int line_skip;
     f32 size;
+    f32 max_advance;
 };
 
 struct FontProvider {

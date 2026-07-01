@@ -213,7 +213,7 @@ void update(f32 dt, Array<os::Event*> window_events) {
     ui::set_next_fixed_y(0);
     ui::push_background_color(Vector4(0, 0, 0, 1));
     ui::push_text_color(Vector4(1, 1,1, 1));
-    ui::Box *main_cont = ui::box_create(ui::BoxFlag_Layer, STRZ("~MainCont"));
+    ui::Box *main_cont = ui::box_create(ui::BoxFlag_Clip|ui::BoxFlag_Layer, STRZ("~MainCont"));
     UI_Parent(main_cont) {
         cu_local_persist f32 debug_t = 0.0f;
         const f32 debug_max = 0.8f;
@@ -286,6 +286,7 @@ void update(f32 dt, Array<os::Event*> window_events) {
         ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
         ui::set_next_background_color(Vector4(.11f, .11f, .1f, 1.f));
         ui::set_next_text_color(Vector4(.85f, .82f, .75f, 1.f));
+        ui::set_next_font_size(20.0f);
         view->box = ui::box_create(ui::BoxFlag_MouseClickable|ui::BoxFlag_KeyboardClickable, string_fmt("##view_%lld", view->id));
         view->box->draw_data = (void *)view;
         view->box->draw_proc = ui_draw_view;
@@ -302,7 +303,7 @@ void update(f32 dt, Array<os::Event*> window_events) {
         ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
         ui::set_next_child_alignment_x(ui::Alignment_Center);
         ui::set_next_child_alignment_y(ui::Alignment_Center);
-        ui::Box *file_system_layer = ui::box_create(ui::BoxFlag_Layer, STRZ("##fsLayer"));
+        ui::Box *file_system_layer = ui::box_create(ui::BoxFlag_Clip|ui::BoxFlag_Layer, STRZ("##fsLayer"));
         UI_Parent(file_system_layer) {
             ui::set_next_pref_width(ui::pct_size(.5f, 1.f));
             ui::set_next_pref_height(ui::pct_size(.9f, 1.f));
@@ -399,7 +400,7 @@ UI_DRAW_PROC(ui_draw_view) {
 
     Font *font = box->font;
     String buffer_text = string_concat(String{buffer->text, buffer->gb}, String{buffer->text + buffer->ge, buffer->len - buffer->ge});
-    // ui::draw_text(buffer_text, box->rect, box->rect.tl, font, box->text_color, box->font_size, );
+    ui::draw_text(buffer_text, box->rect, box->rect.tl, font, box->text_color, box->font_size, 0, Vector2::ZERO, ui::DrawTextFlag_Default);
 
     Vector2 start = box->rect.tl;
     Vector2 cursor = start;

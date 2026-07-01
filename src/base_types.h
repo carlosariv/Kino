@@ -173,5 +173,3 @@ union Rect {
     Rect() { }
     Rect(f32 l, f32 t, f32 r, f32 b) : left(l), top(t), right(r), bottom(b) {}
 };
-
-

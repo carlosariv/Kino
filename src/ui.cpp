@@ -200,6 +200,7 @@ Box *box_create(BoxFlags flags, Key key) {
     box->text_color = top_text_color();
     box->hot_color = top_hot_color();
     box->active_color = top_active_color();
+    box->focus_color = Vector4(1, 0, 0, 1);
 
     if (!ui_state->fixed_x_stack.is_empty()) {
         box->flags |= BoxFlag_FloatingX;
@@ -488,15 +489,14 @@ void layout_place_boxes(Box *root, Axis axis) {
                     layout_position = box->fixed_size[axis] - actual_content_size;
                     break;
                 }
-
-                // case Alignment_SpaceBetween: {
-                //     f32 children_sum = 0.0f;
-                //     for (Box *child = box->first; child; child = child->next) {
-                //         children_sum += child->fixed_size[axis];
-                //     }
-                //     gap = (box->fixed_size[axis] - children_sum) / cu_clamp_bot(1, box->child_count);
-                //     break;
-                // }
+                case Alignment_SpaceBetween: {
+                    f32 children_sum = 0.0f;
+                    for (Box *child = box->first; child; child = child->next) {
+                        children_sum += child->fixed_size[axis];
+                    }
+                    gap = (box->fixed_size[axis] - children_sum) / cu_clamp_bot(1, box->child_count);
+                    break;
+                }
             }
         }
 
@@ -513,9 +513,9 @@ void layout_place_boxes(Box *root, Axis axis) {
                         case Alignment_End:
                             layout_position += child->fixed_size[axis];
                             break;
-                        // case Alignment_SpaceBetween:
-                        //     layout_position += child->fixed_size[axis] + gap;
-                        //     break;
+                        case Alignment_SpaceBetween:
+                            layout_position += child->fixed_size[axis] + gap;
+                            break;
                     }
                 } else {
                     switch (box->child_alignment[axis]) {
@@ -619,8 +619,6 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
 
     ui_state->events = events;
 
-    // Box *focus_active_box = find_box(ui_state->active_box_key);
-
     for (os::Event *event : events) {
         MouseButtonKind mouse_kind = (MouseButtonKind)0;
         if (event->key == Keycode::MouseLeft) mouse_kind = MouseButtonKind_Left;
@@ -674,7 +672,9 @@ void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event
     set_next_fixed_height(render_dimension.y);
     set_next_fixed_x(0);
     set_next_fixed_y(0);
-    Box *root = box_create(BoxFlag_FixedSize, STRZ("#~Root"));
+    Box *root = box_create(BoxFlag_Clip, STRZ("#~Root"));
+    root->rect.tl = Vector2(0, 0);
+    root->rect.br = root->rect.tl + render_dimension;
     ui_state->root = root;
 
     push_parent(root);
@@ -692,6 +692,20 @@ void end_frame() {
         }
 
         os::main_window->current_cursor = hot_box->hover_cursor;
+    }
+
+    if (!key_match(ui_state->focus_box_key, key_zero())) {
+        Box *focus_box = find_box(ui_state->focus_box_key);
+        if (focus_box) {
+            for (os::Event *evt : ui_state->events) {
+                if (evt->type == os::Event::MousePress) {
+                    Vector2 pt = Vector2(evt->mx, evt->my);
+                    if (!point_in_rect(pt, focus_box->rect)) {
+                        ui_state->focus_box_key = key_zero();
+                    }
+                }
+            }
+        }
     }
 
     f32 dt = ui_state->frame_delta;
@@ -727,28 +741,56 @@ DrawBatch *current_draw_batch() {
     return batch;
 }
 
-DrawBatch *draw_batch_new(Texture *texture) {
+DrawBatch *draw_batch_new() {
     DrawBatch *batch = New(DrawBatch, arena_allocator(get_build_arena()));
-    batch->texture = texture;
     batch->vertices_index = ui_draw_data->vertices.count;
     batch->vertex_count = 0;
     return batch;
 }
 
 DrawBatch *draw_batch_create() {
-    DrawBatch *batch = draw_batch_new(nullptr);
+    DrawBatch *batch = draw_batch_new();
     ui_draw_data->batches.add(batch);
     return batch;
 }
 
+void draw_batch_copy(DrawBatch *dst, DrawBatch *src) {
+    dst->texture = src->texture;
+    dst->clip = src->clip;
+}
+
 void draw_set_texture(Texture *texture) {
     DrawBatch *batch = current_draw_batch();
-    if (batch == nullptr || batch->texture != texture) {
-        batch = draw_batch_create();
-        set_current_draw_batch(batch);
+    if (batch->texture != texture) {
+        DrawBatch *new_batch = draw_batch_create();
+        draw_batch_copy(new_batch, batch);
+        set_current_draw_batch(new_batch);
+    }
+}
 
-        //TODO: Copy previous batch
-        batch->texture = texture;
+bool rect_equals(Rect a, Rect b) {
+    return a.x0 == b.x0 && a.y0 == b.y0 && a.x1 == b.x1 && a.y1 == b.y1;
+}
+
+void draw_set_clip(Rect clip) {
+    DrawBatch *batch = current_draw_batch();
+    if (rect_equals(batch->clip, clip)) {
+        DrawBatch *new_batch = draw_batch_create();
+        draw_batch_copy(new_batch, batch);
+        set_current_draw_batch(new_batch);
+    }
+}
+
+void draw_batch_params(Texture *texture, Rect clip) {
+    DrawBatch *batch = current_draw_batch();
+    if (batch==nullptr || batch->texture != texture || !rect_equals(batch->clip, clip)) {
+        DrawBatch *new_batch = draw_batch_create();
+        if (batch) {
+            draw_batch_copy(new_batch, batch);
+        }
+        new_batch->texture = texture;
+        new_batch->clip = clip;
+        set_current_draw_batch(new_batch);
     }
 }
 
@@ -784,15 +826,20 @@ void draw_rect(Rect dst, Rect src, Vector4 color) {
     draw_vertex(tr);
 }
 
-void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 color, f32 size, f32 max_x, Vector2 text_size) {
+void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 color, f32 size, f32 max_x, Vector2 text_size, DrawTextFlags flags) {
     f32 dpi = os::main_window->dpi;
     // f32 line_height = size * (dpi / 72.f);
     f32 scale = size / font->size;
     draw_set_texture(font->texture);
 
+    bool truncate = flags & DrawTextFlag_Truncate;
     const String ellipses = STRZ("...");
-    const f32 ellipses_width = measure_text_size(ellipses, font, size).x;
-    bool trailer_enabled = text_size.x > max_x && ellipses_width < max_x;
+    const f32 ellipses_width = 0.0f;
+    bool trailer_enabled = false;
+    if (truncate) {
+        measure_text_size(ellipses, font, size).x;
+        trailer_enabled = text_size.x > max_x && ellipses_width < max_x;
+    }
 
     Vector2 cursor = position;
     for (isize i = 0; i < text.len; i++) {
@@ -809,8 +856,7 @@ void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 c
             //- NOTE: Truncate text
             if (trailer_enabled) {
                 if (dst.right > bounds.x1-ellipses_width) {
-                    // cu_breakpoint();
-                    draw_text(ellipses, bounds, cursor, font, color, size, 1000, Vector2(0, 0));
+                    draw_text(ellipses, bounds, cursor, font, color, size, 1000, Vector2(0, 0), flags);
                     break;
                 }
             }
@@ -865,17 +911,25 @@ Vector2 get_box_text_position(Box *box) {
 
 
 void draw_layout() {
+    Box *root = ui_state->root;
+
     DrawData *draw_data = ui_draw_data;
+    draw_data->current_batch = nullptr;
     draw_data->vertices.reset();
     draw_data->batches.release();
-    set_current_draw_batch(nullptr);
-
-    Box *root = ui_state->root;
 
     for (Box *box = root; box; box = box_rec_pre(box, root).next) {
         DrawData *draw_data = ui_draw_data;
 
-        draw_set_texture(box->font->texture);
+        Rect clip_rect = {};
+        for (Box *b = box; b; b = b->parent) {
+            if (b->flags & BoxFlag_Clip) {
+                clip_rect = b->rect;
+                break;
+            }
+        }
+
+        draw_batch_params(box->font->texture, clip_rect);
 
         if (box->flags & BoxFlag_DrawBackground) {
             Vector4 background_color = box->background_color;
@@ -893,6 +947,10 @@ void draw_layout() {
                         break;
                     }
                 }
+            }
+
+            if (key_match(ui_state->focus_box_key, box->key)) {
+                background_color = box->focus_color;
             }
 
             draw_rect(box->rect, background_color);
@@ -934,7 +992,11 @@ void draw_layout() {
             Vector2 text_position = get_box_text_position(box);
             f32 max_x = box->rect.x1 - text_position.x;
             Vector2 text_size = measure_text_size(box->text, box->font, box->font_size);
-            draw_text(box->text, box->rect, text_position, box->font, box->text_color, box->font_size, max_x, text_size);
+            DrawTextFlags flags = DrawTextFlag_Default;
+            if (!(box->flags & BoxFlag_DisableTruncateText)) {
+                flags |= DrawTextFlag_Truncate;
+            }
+            draw_text(box->text, box->rect, text_position, box->font, box->text_color, box->font_size, max_x, text_size, flags);
         }
 
         if (box->draw_proc) {
@@ -969,6 +1031,7 @@ Signal signal_from_box(Box *box) {
 
     bool clicked = false;
     bool pressed = false;
+    bool focused = false;
     for (int i = 0; i < ui_state->events.count; i++) {
         os::Event *evt = ui_state->events[i];
 
@@ -983,6 +1046,10 @@ Signal signal_from_box(Box *box) {
                     ui_state->active_box_key[mouse_kind] = box->key;
                     box->active_t = 0;
                     clicked = true;
+                    if (box->flags & BoxFlag_ClickToFocus) {
+                        ui_state->focus_box_key = box->key;
+                        focused = true;
+                    }
                 }
                 break;
             }
@@ -998,6 +1065,7 @@ Signal signal_from_box(Box *box) {
     signal.hover = hover;
     signal.clicked = clicked;
     signal.pressed = pressed;
+    signal.focused = focused;
     return signal;
 }
 

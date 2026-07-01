@@ -15,6 +15,8 @@
 #define cu_clamp_bot(bot,v) (cu_max(v, bot))
 #define cu_clamp_top(v,top) (cu_min(v, top))
 
+#define cu_bit(X) (1<<X)
+
 #define cu_kilobytes(n) (1024 * (n))
 #define cu_megabytes(n) (1024 * cu_kilobytes(n))
 #define cu_gigabytes(n) (1024 * cu_megabytes(n))

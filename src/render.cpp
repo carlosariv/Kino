@@ -21,7 +21,7 @@ Texture *atlas_texture;
 ID3D11Buffer *ui_cbuffer;
 
 ID3D11RasterizerState *cull_none;
-ID3D11RasterizerState *rasterizer_text;
+ID3D11RasterizerState *rasterizer_ui;
 ID3D11RasterizerState *cull_back;
 
 ID3D11BlendState *blend_state_ui;
@@ -271,7 +271,8 @@ void render_init() {
         desc.CullMode = D3D11_CULL_BACK;
         desc.FrontCounterClockwise = FALSE;
         desc.AntialiasedLineEnable = TRUE;
-        g_d3d11_state->device->CreateRasterizerState(&desc, &rasterizer_text);
+        desc.ScissorEnable = TRUE;
+        g_d3d11_state->device->CreateRasterizerState(&desc, &rasterizer_ui);
     }
 
 
@@ -413,9 +414,11 @@ void render_ui(ui::DrawData *draw_data, Vector2 render_dimension) {
     d3d11->device_context->OMSetBlendState(blend_state_ui, blend_factor, 0xFFFFFFFF);
     d3d11->device_context->PSSetSamplers(0, 1, &sampler_point);
 
-    d3d11->device_context->RSSetState(rasterizer_text);
+    d3d11->device_context->RSSetState(rasterizer_ui);
 
     for (ui::DrawBatch *batch : draw_data->batches) {
+        D3D11_RECT clip_rect = {(int)batch->clip.x0, (int)batch->clip.y0, (int)batch->clip.x1, (int)batch->clip.y1};
+        d3d11->device_context->RSSetScissorRects(1, &clip_rect);
         d3d11->device_context->PSSetShaderResources(0, 1, &batch->texture->srv);
         d3d11->device_context->Draw(batch->vertex_count, batch->vertices_index);
     }

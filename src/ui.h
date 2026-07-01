@@ -100,29 +100,33 @@ struct PrefSize {
 enum BoxFlags {
     BoxFlag_Default = 0,
 
-    BoxFlag_MouseClickable    = (1<<0),
-    BoxFlag_MouseHoverable    = (1<<1),
-    BoxFlag_KeyboardClickable = (1<<2),
+    BoxFlag_MouseClickable    = cu_bit(0),
+    BoxFlag_MouseHoverable    = cu_bit(1),
+    BoxFlag_KeyboardClickable = cu_bit(2),
+    BoxFlag_ClickToFocus      = cu_bit(3),
 
-    BoxFlag_Layer       = (1<<5),
-    BoxFlag_FloatingX   = (1<<6),
-    BoxFlag_FloatingY   = (1<<7),
-    BoxFlag_FixedWidth  = (1<<8),
-    BoxFlag_FixedHeight = (1<<9),
-    BoxFlag_AllowOverflowX = (1<<10),
-    BoxFlag_AllowOverflowY = (1<<11),
+    BoxFlag_Layer       = cu_bit(5),
+    BoxFlag_FloatingX   = cu_bit(6),
+    BoxFlag_FloatingY   = cu_bit(7),
+    BoxFlag_FixedWidth  = cu_bit(8),
+    BoxFlag_FixedHeight = cu_bit(9),
+    BoxFlag_AllowOverflowX = cu_bit(10),
+    BoxFlag_AllowOverflowY = cu_bit(11),
 
-    BoxFlag_DrawBackground = (1<<15),
-    BoxFlag_DrawText = (1<<16),
-    BoxFlag_DrawBorder = (1<<17),
-    BoxFlag_DrawHotEffects = (1<<18),
-    BoxFlag_DrawActiveEffects = (1<<19),
-    BoxFlag_DrawTop = (1<<20),
-    BoxFlag_DrawBottom = (1<<21),
-    BoxFlag_DrawLeft = (1<<22),
-    BoxFlag_DrawRight = (1<<23),
+    BoxFlag_DrawBackground = cu_bit(15),
+    BoxFlag_DrawText = cu_bit(16),
+    BoxFlag_DrawBorder = cu_bit(17),
+    BoxFlag_DrawHotEffects = cu_bit(18),
+    BoxFlag_DrawActiveEffects = cu_bit(19),
+    BoxFlag_DrawTop = cu_bit(20),
+    BoxFlag_DrawBottom = cu_bit(21),
+    BoxFlag_DrawLeft = cu_bit(22),
+    BoxFlag_DrawRight = cu_bit(23),
+    BoxFlag_DisableTruncateText = cu_bit(24),
 
-    BoxFlag_Clip = (1<<30),
+    BoxFlag_Clip = cu_bit(30),
+
+    BoxFlag_Select = cu_bit(31),
 
     BoxFlag_Floating  = (BoxFlag_FloatingX|BoxFlag_FloatingY),
     BoxFlag_FixedSize = (BoxFlag_FixedWidth|BoxFlag_FixedHeight),
@@ -137,7 +141,7 @@ enum Alignment {
     Alignment_Start,
     Alignment_Center,
     Alignment_End,
-    // Alignment_SpaceBetween,
+    Alignment_SpaceBetween,
 };
 
 // enum TextAlignment {
@@ -167,6 +171,7 @@ struct Box {
     Vector4 border_color;
     Vector4 hot_color;
     Vector4 active_color;
+    Vector4 focus_color;
     Font *font;
     f32 font_size;
     os::Cursor hover_cursor;
@@ -239,15 +244,16 @@ struct Vertex {
 };
 
 struct DrawBatch {
-    Texture *texture;
     isize vertices_index;
     isize vertex_count;
+    Texture *texture;
+    Rect clip;
 };
 
 struct DrawData {
     Texture *fallback_texture;
     Array<DrawBatch*> batches;
-    DrawBatch *current_batch;
+    DrawBatch *current_batch = nullptr;
     Array<Vertex> vertices;
 
     uint vertex_buffer_cap = 0;
@@ -260,6 +266,7 @@ struct Signal {
     bool clicked;
     bool pressed;
     bool dragging;
+    bool focused;
 };
 
 enum MouseButtonKind {
@@ -290,6 +297,7 @@ struct UIState {
 
     Key hot_box_key = 0;
     Key active_box_key[MouseButtonKind_COUNT] = {};
+    Key focus_box_key = 0;
 
     Array<Rect> blacklist_rects;
     u32 depth_counter = 0;
@@ -338,13 +346,18 @@ Signal signal_from_box(Box *box);
 void per_frame_update(Vector2 render_dimension, f32 frame_delta, Array<os::Event*> &events);
 void end_frame();
 
+enum DrawTextFlags {
+    DrawTextFlag_Default = 0,
+    DrawTextFlag_Truncate = cu_bit(0),
+};
+ENUM_FLAG_OPERATORS(DrawTextFlags);
 
 DrawBatch *draw_batch_create();
 void draw_set_texture(Texture *texture);
 void draw_vertex(Vertex v);
 void draw_rect(Rect rect, Vector4 color);
 void draw_rect(Rect dst, Rect src, Vector4 color);
-void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 color, f32 size, f32 max_x, Vector2 text_size);
+void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 color, f32 size, f32 max_x, Vector2 text_size, DrawTextFlags flags);
 void draw_box(Box *box);
 void draw_layout();
 
