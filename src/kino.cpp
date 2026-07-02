@@ -52,7 +52,7 @@ KINO_COMMAND(file_system_open) {
     FileSystem *fs = g_file_system;
     if (!fs->active) {
         fs->active = true;
-        file_system_load(fs, os::current_path());
+        file_system_load(fs, STRZ("C:/Dev/Kino/src"));
     } else {
         fs->active = false;
     }
@@ -194,7 +194,7 @@ void update(f32 dt, Array<os::Event*> window_events) {
 
                 Key key = make_key(evt->key, mod);
 
-                printf("key: %x control:%d shift:%d alt:%d %s\n", key, (mod&KeyMod_Control)!=0, (mod&KeyMod_Shift)!=0, (mod&KeyMod_Alt)!=0, evt->text.text ? (char *)evt->text.text : "");
+                // printf("key: %x control:%d shift:%d alt:%d %s\n", key, (mod&KeyMod_Control)!=0, (mod&KeyMod_Shift)!=0, (mod&KeyMod_Alt)!=0, evt->text.text ? (char *)evt->text.text : "");
 
                 state->self_insert = evt->text;
                 handle_key_press(key);
@@ -293,7 +293,6 @@ void update(f32 dt, Array<os::Event*> window_events) {
     }
 
     FileSystem *fs = g_file_system;
-
     if (fs->active) {
         ui::push_background_color(Vector4(.11f, .12f, .17f, 1.f));
         ui::push_text_color(Vector4(0.85f, 0.82f, 0.75f, 1.0f));
@@ -305,91 +304,75 @@ void update(f32 dt, Array<os::Event*> window_events) {
         ui::set_next_child_alignment_y(ui::Alignment_Center);
         ui::Box *file_system_layer = ui::box_create(ui::BoxFlag_Clip|ui::BoxFlag_Layer, STRZ("##fsLayer"));
         UI_Parent(file_system_layer) {
-            ui::set_next_pref_width(ui::pct_size(.5f, 1.f));
-            ui::set_next_pref_height(ui::pct_size(.9f, 1.f));
-            ui::set_next_layout_axis(Axis_X);
-            ui::set_next_child_alignment_x(ui::Alignment_Center);
-            ui::set_next_border_color(Vector4(0.65f, 0.67f, 0.8f, 1.f));
-            ui::Box *file_system_cont = ui::box_create(ui::BoxFlag_DrawBackground|ui::BoxFlag_DrawBorder, STRZ("##fsContainer"));
 
+            cu_local_persist ui::ScrollPt scroll_pt = {};
 
-            f32 row_height = 30.0f;
+            ui::ScrollListParams scroll_list_params = {};
+            scroll_list_params.axis = Axis_Y;
+            scroll_list_params.size[Axis_X] = ui::pct_size(.5f, 1.f);
+            scroll_list_params.size[Axis_Y] = ui::pct_size(.9f, 1.f);
+            scroll_list_params.row_height = 30.f;
+            scroll_list_params.border_color = Vector4(1, 1, 1, 1);
+            scroll_list_params.text_color = Vector4(0, 0, 0, 1);
+            scroll_list_params.item_count = fs->files.count;
+            scroll_list_params.scroll_pt = &scroll_pt;
 
-            UI_Parent(file_system_cont) {
-                // File Buttons
-                ui::set_next_pref_width(ui::pct_size(1.f, 1.f));
-                ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
-                ui::set_next_layout_axis(Axis_Y);
-                UI_Parent(ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##file_buttons"))) {
-                    ui::push_pref_width(ui::pct_size(1.f, 0.f));
-                    ui::push_pref_height(ui::pixel_size(row_height, 1.f));
+            ui::scrollable_list_begin(scroll_list_params);
+            {
+                ui::push_pref_width(ui::pct_size(1.f, 0.f));
+                ui::push_pref_height(ui::pixel_size(scroll_list_params.row_height, 1.f));
 
-                    struct LineEdit {
-                        u8 *buffer;
-                        int len;
-                        int capacity;
-                        int pos;
-                    };
+                for (int i = 0; i < fs->files.count; i++) {
+                    os::File *file = &fs->files[i];
+                    ui::set_next_border_color(Vector4(0.33f, 0.43f, 0.51f, 1.f));
 
-                    cu_local_persist LineEdit ed = {};
+                    if (i %2 == 0) ui::set_next_background_color(Vector4(.094f, .102f, .153f, 1.f));
 
-                    ui::line_edit(&ed.buffer, &ed.pos, &ed.len, &ed.capacity, STRZ("##file_line"));
-
-                    for (int i = 0; i < cu_clamp_top(fs->files.count, 14); i++) {
-                        os::File *file = &fs->files[i];
-                        ui::set_next_border_color(Vector4(0.33f, 0.43f, 0.51f, 1.f));
-
-                        if (i %2 == 0) ui::set_next_background_color(Vector4(.094f, .102f, .153f, 1.f));
-
-                        ui::set_next_layout_axis(Axis_X);
-                        ui::set_next_pref_width(ui::pct_size(1.0f, 1.f));
-                        ui::Box *row = ui::box_create(ui::BoxFlag_MouseClickable|ui::BoxFlag_DrawBackground|ui::BoxFlag_DrawBottom|ui::BoxFlag_DrawHotEffects, string_fmt("##file_%d", i));
-                        UI_Parent(row) {
-                            ui::set_next_pref_width(ui::text_size(4.f, 0.f));
-                            ui::set_next_pref_height(ui::text_size(4.f, 1.f));
-                            ui::set_next_font(ui::icon_font);
-                            if (file->attributes & os::FileAttrib_Directory) {
-                                ui::set_next_text_color(Vector4(0.98f, 0.73f, 0.11f, 1.f));
-                                ui::label(ui::string_from_icon_kind(ui::IconKind_Folder, "##folder"));
-                            } else {
-                                ui::set_next_text_color(Vector4(1.f, 1.f, 1.f, 1.f));
-                                ui::label(ui::string_from_icon_kind(ui::IconKind_Document, "##doc"));
-                            }
-
-                            ui::set_next_pref_width(ui::text_size(4.f, 0.f));
-                            ui::set_next_pref_height(ui::text_size(4.f, 1.f));
-                            ui::label(string_fmt("%s", file->file_name.text));
-
-                            ui::set_next_pref_width(ui::text_size(4.f, 0.f));
-                            ui::set_next_pref_height(ui::text_size(4.f, 1.f));
-                            ui::label(string_fmt("%llu##size_%d", file->file_size, i));
+                    ui::set_next_layout_axis(Axis_X);
+                    ui::set_next_pref_width(ui::pct_size(1.0f, 1.f));
+                    String row_str = string_fmt("##file_%d%d", i*i, i);
+                    ui::Box *row = ui::box_create(ui::BoxFlag_MouseClickable|ui::BoxFlag_DrawBackground|ui::BoxFlag_DrawBottom|ui::BoxFlag_DrawHotEffects, row_str);
+                    UI_Parent(row) {
+                        ui::set_next_pref_width(ui::text_size(4.f, 0.f));
+                        ui::set_next_pref_height(ui::text_size(4.f, 1.f));
+                        ui::set_next_font(ui::icon_font);
+                        if (file->attributes & os::FileAttrib_Directory) {
+                            ui::set_next_text_color(Vector4(0.98f, 0.73f, 0.11f, 1.f));
+                            ui::label(ui::string_from_icon_kind(ui::IconKind_Folder, "##folder"));
+                        } else {
+                            ui::set_next_text_color(Vector4(1.f, 1.f, 1.f, 1.f));
+                            ui::label(ui::string_from_icon_kind(ui::IconKind_Document, "##doc"));
                         }
 
-                        ui::Signal row_sig = ui::signal_from_box(row);
-                        if (row_sig.clicked) {
-                            printf("%s\n", (char *)file->file_name.text);
-                        }
+                        ui::set_next_pref_width(ui::text_size(4.f, 0.f));
+                        ui::set_next_pref_height(ui::text_size(4.f, 1.f));
+                        ui::label(string_fmt("%s", file->file_name.text));
+
+                        ui::set_next_pref_width(ui::text_size(4.f, 0.f));
+                        ui::set_next_pref_height(ui::text_size(4.f, 1.f));
+                        ui::label(string_fmt("%llu##size_%d", file->file_size, i));
                     }
 
-                    ui::pop_pref_width();
-                    ui::pop_pref_height();
+                    ui::Signal row_sig = ui::signal_from_box(row);
+
+                    if (row_sig.clicked) {
+                        if (file->attributes & os::FileAttrib_Directory) {
+                            String path = string_concat(fs->path, STRZ("/"));
+                            path = string_concat(path, file->file_name);
+                            file_system_load(fs, path);
+                        }
+                    }
                 }
 
-                cu_local_persist ui::ScrollPt scroll_pt = {};
-                int visible_line_count = (file_system_cont->rect.bottom - file_system_cont->rect.top) / (ui::top_font_size() + 8.0f);
-
-                int visible_row_count = (file_system_cont->rect.bottom - file_system_cont->rect.top) / row_height;
-
-                scroll_pt = ui::scroll_bar(STRZ("##scroll"), Axis_Y, scroll_pt, 0, 12, visible_row_count);
+                ui::pop_pref_width();
+                ui::pop_pref_height();
             }
+            ui::scrollable_list_end(scroll_list_params);
+
         }
         ui::pop_background_color();
         ui::pop_text_color();
     }
-
-    // layout_pane(state->root_pane);
-
-    ViewManager *view_manager = state->view_manager;
 }
 
 UI_DRAW_PROC(ui_draw_view) {

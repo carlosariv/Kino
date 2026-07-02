@@ -319,6 +319,7 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 
     bool release = false;
+    bool horizontal = false;
 
     auto mouse_wm_to_key = [msg]() -> Keycode {
         switch (msg) {
@@ -578,11 +579,22 @@ LRESULT window_event_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             }
         } break;
 
-        case WM_MOUSEWHEEL: {
+        case WM_MOUSEHWHEEL: {
             evt = push_event(Event::MouseWheel);
-            evt->wheel_delta = HIWORD(wParam) / 120;
             evt->mx = GET_X_LPARAM(lParam);
             evt->my = GET_Y_LPARAM(lParam);
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            evt->scroll.x = (f32)delta;
+            evt->scroll.y = 0.f;
+        } break;
+
+        case WM_MOUSEWHEEL: {
+            evt = push_event(Event::MouseWheel);
+            evt->mx = GET_X_LPARAM(lParam);
+            evt->my = GET_Y_LPARAM(lParam);
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            evt->scroll.x = 0.f;
+            evt->scroll.y = (f32)delta;
         } break;
 
         default:
@@ -642,7 +654,7 @@ Event *push_event(Event::Type type) {
 
 Array<File> list_directory_files(String path) {
     Array<File> files;
-    String find_path = string_concat(path, STRZ("/*"));
+    String find_path = string_concat( path, STRZ("/*"));
     WIN32_FIND_DATAA file_data;
     HANDLE find_handle = FindFirstFile((LPCSTR)find_path.text, &file_data);
 

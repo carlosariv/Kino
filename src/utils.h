@@ -7,6 +7,8 @@
 #define PLATFORM_LINUX
 #endif // __linux__
 
+// #include <math.h>
+// f32 floor_f32(f32 v) { return floorf(v); }
 
 #define cu_abs(x) ((x) >= 0 ? (x) : -(x))
 #define cu_min(a,b) ((a) < (b) ? (a) : (b))
@@ -15,7 +17,7 @@
 #define cu_clamp_bot(bot,v) (cu_max(v, bot))
 #define cu_clamp_top(v,top) (cu_min(v, top))
 
-#define cu_bit(X) (1<<X)
+#define cu_bit(X) ((u64)1<<X)
 
 #define cu_kilobytes(n) (1024 * (n))
 #define cu_megabytes(n) (1024 * cu_kilobytes(n))
@@ -66,11 +68,4 @@
 void __debug_breakpoint();
 #define cu_breakpoint __debug_breakpoint
 
-inline Axis flip_axis(Axis axis) {
-    if (axis == Axis_X) {
-        return Axis_Y;
-    } else {
-        return Axis_X;
-    }
-}
 

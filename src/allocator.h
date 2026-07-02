@@ -2,7 +2,9 @@
 
 #include <cstring>
 #include <stdlib.h>
+#include <new>
 
+#include "base_types.h"
 #include "utils.h"
 
 enum AllocationKind {
@@ -61,7 +63,6 @@ void *cu_resize(Allocator a, void *ptr, isize old_size, isize new_size);
 #define cu_alloc_item(T,a,size) (T*)cu_allocate(a, size)
 #define cu_alloc_array(T,a,size) (T*)cu_allocate(a, size)
 
-// #define push_array(A,T,C) (T*)arena_push(A, sizeof(T)*C)
-#define New(T,A) new (cu_allocate(A,sizeof(T))) T
-#define NewArray(T,A,C) new (cu_allocate(A,(C)*sizeof(T))) T
+#define New(T,A) new (cu_allocate(A, sizeof(T))) T
+#define NewArray(T,A,C) new (cu_allocate(A,(C)*sizeof(T))) T[C]
 

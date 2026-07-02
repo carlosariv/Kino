@@ -46,7 +46,7 @@ X(os::Cursor, hover_cursor) \
 #define UI_PARAM_SET_NEXT(Type,Name) inline void set_next_ ## Name(Type v) { ui_state->Name ## _stack.set_next(v); }
 #define UI_PARAM_SET_NEXT_DECLS UI_PARAM_LIST(UI_PARAM_SET_NEXT)
 
-#define UI_PARAM_POP(Type,Name) inline void pop_ ## Name() { ui_state->Name ## _stack.pop(); }
+#define UI_PARAM_POP(Type,Name) inline Type pop_ ## Name() { return ui_state->Name ## _stack.pop(); }
 #define UI_PARAM_POP_DECLS UI_PARAM_LIST(UI_PARAM_POP)
 
 namespace ui {
@@ -97,7 +97,7 @@ struct PrefSize {
     f32 strictness;
 };
 
-enum BoxFlags {
+enum BoxFlags : u64 {
     BoxFlag_Default = 0,
 
     BoxFlag_MouseClickable    = cu_bit(0),
@@ -127,6 +127,7 @@ enum BoxFlags {
     BoxFlag_Clip = cu_bit(30),
 
     BoxFlag_Select = cu_bit(31),
+    BoxFlag_Scroll = cu_bit(32),
 
     BoxFlag_Floating  = (BoxFlag_FloatingX|BoxFlag_FloatingY),
     BoxFlag_FixedSize = (BoxFlag_FixedWidth|BoxFlag_FixedHeight),
@@ -213,9 +214,14 @@ struct Param {
         stack.add(value);
     }
 
-    void pop() {
-        stack.remove();
+    T pop() {
         pop_next = false;
+        T result = default_value;
+        if (stack.count > 0) {
+            result = stack[stack.count-1];
+            stack.remove();
+        }
+        return result;
     }
 
     void clear() {
@@ -267,6 +273,7 @@ struct Signal {
     bool pressed;
     bool dragging;
     bool focused;
+    Vector2 scroll;
 };
 
 enum MouseButtonKind {
@@ -337,7 +344,9 @@ inline PrefSize pct_size(f32 value, f32 strictness) {
 }
 
 inline void push_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) push_pref_width(v); else push_pref_height(v); }
+inline PrefSize pop_pref_size(Axis axis) { if (axis==Axis_X) return pop_pref_width(); else return pop_pref_height(); }
 inline void set_next_pref_size(Axis axis, PrefSize v) { if (axis==Axis_X) set_next_pref_width(v); else set_next_pref_height(v); }
+inline void set_next_fixed_position(Axis axis, f32 v) { if (axis==Axis_X) set_next_fixed_x(v); else set_next_fixed_y(v); }
 
 Box *box_create(BoxFlags flags, Key key);
 Box *box_create(BoxFlags flags, String string);
@@ -361,6 +370,7 @@ void draw_text(String text, Rect bounds, Vector2 position, Font *font, Vector4 c
 void draw_box(Box *box);
 void draw_layout();
 
+bool point_in_rect(Vector2 pt, Rect rect);
 
 Vector2 measure_text_size(String text, Font *font, f32 size);
 

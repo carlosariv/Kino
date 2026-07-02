@@ -155,6 +155,11 @@ union Vector4Int {
     static const Vector4Int BACKWARD;
 };
 
+struct RngI64 {
+    i64 min;
+    i64 max;
+};
+
 union Rect {
     struct {
         f32 left, top, right, bottom;
@@ -173,3 +178,12 @@ union Rect {
     Rect() { }
     Rect(f32 l, f32 t, f32 r, f32 b) : left(l), top(t), right(r), bottom(b) {}
 };
+
+inline Axis flip_axis(Axis axis) {
+    if (axis == Axis_X) {
+        return Axis_Y;
+    } else {
+        return Axis_X;
+    }
+}
+

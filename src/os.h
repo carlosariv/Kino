@@ -71,8 +71,8 @@ struct Event {
     Keycode key = Keycode::Nil;
     ModFlags mod_flags = ModFlag_Nil;
     String text = {};
-    int mx, my;
-    int wheel_delta;
+    int mx = 0, my = 0;
+    Vector2 scroll = {};
 
     Event() { }
 

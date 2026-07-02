@@ -154,7 +154,7 @@ Box *find_layer_container(Box *box) {
 }
 
 Box *box_create(BoxFlags flags, Key key) {
-    bool is_transient = (key == 0);
+    bool is_transient = key == key_zero();
     Box *box = find_box(key);
     bool just_created = false;
     if (!box || is_transient) {
@@ -399,58 +399,60 @@ void layout_enforce_constraints(Box *root, Axis axis) {
             continue;
         }
 
-        //- NOTE: Fix children sizes along non-layout direction
-        if (axis != box->child_layout_axis) {
-            f32 allowed_size = box->fixed_size[axis];
-            for (Box *child = box->first; child; child = child->next) {
-                f32 child_size = child->fixed_size[axis];
+        if (!(box->flags & BoxFlag_AllowOverflowX<<axis)) {
+            //- NOTE: Fix children sizes along non-layout direction
+            if (axis != box->child_layout_axis) {
+                f32 allowed_size = box->fixed_size[axis];
+                for (Box *child = box->first; child; child = child->next) {
+                    f32 child_size = child->fixed_size[axis];
 
-                f32 fixup = child_size - allowed_size;
-                f32 max_fixup = child_size;
-                fixup = cu_clamp(0, fixup, max_fixup);
+                    f32 fixup = child_size - allowed_size;
+                    f32 max_fixup = child_size;
+                    fixup = cu_clamp(0, fixup, max_fixup);
 
-                if (fixup > 0) {
-                    // printf("NL axis:%d box:%lld: child_size:%f allowed:%f\n", axis, box->key, child_size, allowed_size);
-                    child->fixed_size[axis] -= fixup;
-                }
-            }
-        }
-
-        //- NOTE: Fix children sizes along layout direction
-        if (axis == box->child_layout_axis) {
-            f32 allowed_size = box->fixed_size[axis];
-            f32 total_size = 0;
-            f32 total_weighted_size = 0;
-            for (Box *child = box->first; child; child = child->next) {
-                total_size += child->fixed_size[axis];
-                total_weighted_size += child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
-            }
-
-            f32 violation = total_size - allowed_size;
-
-            if (violation > 0 && total_weighted_size > 0) {
-                // printf("L axis:%d box:%lld total:%f allowed:%f\n", axis, box->key, total_size, allowed_size);
-                Array<f32> children_fixups;
-                {
-                    int child_index = 0;
-                    for (Box *child = box->first; child; child = child->next, child_index += 1) {
-                        f32 fixup = child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
-                        fixup = cu_clamp_bot(0, fixup);
-                        children_fixups.add(fixup);
+                    if (fixup > 0) {
+                        // printf("NL axis:%d box:%lld: child_size:%f allowed:%f\n", axis, box->key, child_size, allowed_size);
+                        child->fixed_size[axis] -= fixup;
                     }
                 }
+            }
 
-                {
-                    int child_index = 0;
-                    for (Box *child = box->first; child; child = child->next, child_index += 1) {
-                        f32 fixup = children_fixups[child_index];
-                        f32 fixup_pct = violation / total_weighted_size;
-                        fixup_pct = cu_clamp(0, fixup_pct, 1);
-                        child->fixed_size[axis] -= fixup * fixup_pct;
-                    }
+            //- NOTE: Fix children sizes along layout direction
+            if (axis == box->child_layout_axis) {
+                f32 allowed_size = box->fixed_size[axis];
+                f32 total_size = 0;
+                f32 total_weighted_size = 0;
+                for (Box *child = box->first; child; child = child->next) {
+                    total_size += child->fixed_size[axis];
+                    total_weighted_size += child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
                 }
 
-                children_fixups.release();
+                f32 violation = total_size - allowed_size;
+
+                if (violation > 0 && total_weighted_size > 0) {
+                    // printf("L axis:%d box:%lld total:%f allowed:%f\n", axis, box->key, total_size, allowed_size);
+                    Array<f32> children_fixups;
+                    {
+                        int child_index = 0;
+                        for (Box *child = box->first; child; child = child->next, child_index += 1) {
+                            f32 fixup = child->fixed_size[axis] * (1-child->pref_size[axis].strictness);
+                            fixup = cu_clamp_bot(0, fixup);
+                            children_fixups.add(fixup);
+                        }
+                    }
+
+                    {
+                        int child_index = 0;
+                        for (Box *child = box->first; child; child = child->next, child_index += 1) {
+                            f32 fixup = children_fixups[child_index];
+                            f32 fixup_pct = violation / total_weighted_size;
+                            fixup_pct = cu_clamp(0, fixup_pct, 1);
+                            child->fixed_size[axis] -= fixup * fixup_pct;
+                        }
+                    }
+
+                    children_fixups.release();
+                }
             }
         }
 
@@ -1008,6 +1010,8 @@ void draw_layout() {
 Signal signal_from_box(Box *box) {
     Signal signal = {};
     signal.box = box;
+    signal.scroll.x = 0.f;
+    signal.scroll.y = 0.f;
 
     Vector2 mouse = get_mouse_cursor();
     bool mouse_over = mouse_in_rect(box->rect);
@@ -1057,6 +1061,21 @@ Signal signal_from_box(Box *box) {
             case os::Event::MouseMove:
                 if (box->flags & BoxFlag_MouseClickable && key_match(ui_state->active_box_key[mouse_kind], box->key)) {
                     signal.dragging = true;
+                }
+                break;
+
+            case os::Event::MouseWheel:
+                if (box->flags & BoxFlag_Scroll && mouse_over) {
+                    if (evt->scroll.x < 0) {
+                        signal.scroll.x = -1.f;
+                    } else if (evt->scroll.x > 0) {
+                        signal.scroll.x = 1.f;
+                    }
+                    if (evt->scroll.y < 0) {
+                        signal.scroll.y = 1.f;
+                    } else if (evt->scroll.y > 0) {
+                        signal.scroll.y = -1.f;
+                    }
                 }
                 break;
         }
