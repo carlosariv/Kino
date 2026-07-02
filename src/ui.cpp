@@ -939,6 +939,7 @@ void draw_layout() {
 
             if (box->flags & BoxFlag_DrawHotEffects && key_match(ui_state->hot_box_key, box->key)) {
                 background_color = box->hot_color * box->hot_t;
+                background_color.w = box->hot_color.w;
             }
 
             if (box->flags & BoxFlag_DrawActiveEffects) {
@@ -946,6 +947,7 @@ void draw_layout() {
                     Key active_key = ui_state->active_box_key[mouse_kind];
                     if (key_match(active_key, box->key)) {
                         background_color = box->active_color * box->active_t;
+                        background_color.w = box->active_color.w;
                         break;
                     }
                 }
@@ -954,6 +956,7 @@ void draw_layout() {
             if (key_match(ui_state->focus_box_key, box->key)) {
                 background_color = box->focus_color;
             }
+
 
             draw_rect(box->rect, background_color);
         }

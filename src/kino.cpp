@@ -191,11 +191,8 @@ void update(f32 dt, Array<os::Event*> window_events) {
                 mod |= (KeyMod)(KeyMod_Control*((evt->mod_flags&os::ModFlag_Control)!=0));
                 mod |= (KeyMod)(KeyMod_Alt*((evt->mod_flags&os::ModFlag_Alt)!=0));
                 mod |= (KeyMod)(KeyMod_Shift*((evt->mod_flags&os::ModFlag_Shift)!=0));
-
                 Key key = make_key(evt->key, mod);
-
                 // printf("key: %x control:%d shift:%d alt:%d %s\n", key, (mod&KeyMod_Control)!=0, (mod&KeyMod_Shift)!=0, (mod&KeyMod_Alt)!=0, evt->text.text ? (char *)evt->text.text : "");
-
                 state->self_insert = evt->text;
                 handle_key_press(key);
                 break;
@@ -372,6 +369,49 @@ void update(f32 dt, Array<os::Event*> window_events) {
         }
         ui::pop_background_color();
         ui::pop_text_color();
+    }
+
+    if (0) {
+        ui::push_background_color(Vector4(.11f, .12f, .17f, 1.f));
+        ui::push_text_color(Vector4(0.85f, 0.82f, 0.75f, 1.0f));
+        ui::set_next_fixed_x(0.0f);
+        ui::set_next_fixed_y(0.0f);
+        ui::set_next_pref_width(ui::pct_size(1.f, 1.f));
+        ui::set_next_pref_height(ui::pct_size(1.f, 1.f));
+        ui::set_next_child_alignment_x(ui::Alignment_Start);
+        ui::set_next_child_alignment_y(ui::Alignment_Start);
+        ui::Box *layer = ui::box_create(ui::BoxFlag_Clip|ui::BoxFlag_Layer, STRZ("##testlayer"));
+
+        UI_Parent(layer) {
+            ui::button(STRZ("foo"));
+            ui::button(STRZ("buzz"));
+
+            ui::IconKind icon;
+            bool *cond = &fs->active;
+            if (*cond) {
+                icon = ui::IconKind_ZoomPlus;
+            } else {
+                icon = ui::IconKind_ZoomMinus;
+            }
+
+            ui::set_next_layout_axis(Axis_X);
+            ui::push_pref_width(ui::pixel_size(100.f, 1.f));
+            ui::push_pref_height(ui::pixel_size(100.f, 1.f));
+            ui::Box *cont = ui::box_create(ui::BoxFlag_DrawBackground, STRZ("##bchfdkj_cont"));
+            UI_Parent(cont) {
+                ui::set_next_font(ui::icon_font);
+                ui::set_next_text_alignment(ui::Alignment_Center);
+                ui::Box *checkbox = ui::box_create(ui::BoxFlag_DrawBackground|ui::BoxFlag_DrawText|ui::BoxFlag_MouseClickable|ui::BoxFlag_DrawHotEffects, ui::string_from_icon_kind(icon, "##checkbox"));
+                ui::Signal sig = ui::signal_from_box(checkbox);
+                if (sig.clicked) {
+                    *cond = !(*cond);
+                }
+                ui::label(STRZ("OPEN FILESYSTEM"));
+            }
+            ui::pop_pref_width();
+            ui::pop_pref_height();
+
+        }
     }
 }
 
