@@ -348,6 +348,13 @@ static STBSP__ASAN stbsp__uint32 stbsp__strlen_limited(char const *s, stbsp__uin
 
 STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback, void *user, char *buf, char const *fmt, va_list va)
 {
+
+    struct __string {
+        unsigned char *text;
+        stbsp__int64 len;
+    };
+
+
    static char hex[] = "0123456789abcdefxp";
    static char hexu[] = "0123456789ABCDEFXP";
    char *bf;
@@ -599,6 +606,23 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          cs = 0;
          // copy the string in
          goto scopy;
+
+        // case 'S': {
+        //     // get the string
+        //     struct __string string = va_arg(va, struct __string);
+        //     s = (char *)string.text;
+        //     if (string.len == 0)
+        //         s = (char *)"null";
+        //     l = string.len;
+        //     lead[0] = 0;
+        //     tail[0] = 0;
+        //     pr = 0;
+        //     dp = 0;
+        //     cs = 0;
+        //     // copy the string in
+        //     goto scopy;
+        // }
+
 
       case 'c': // char
          // get the character
